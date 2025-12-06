@@ -1,0 +1,20 @@
+{
+  "name": "com.natteens.retropsxurp",
+  "version": "0.1.0",
+  "displayName": "RetroPSX-URP",
+  "description": "PSX retro graphics package for URP with Shadergraph in Unity",
+  "keywords": [
+    "Unity",
+    "GameDev",
+    "RetroPSX-URP"
+  ],
+  "author": {
+    "name": "Nathan da Silva Miranda",
+    "email": "natteens.social@gmail.com",
+    "url": "https://github.com/Natteens"
+  },
+  "unity": "6000.0",
+  "documentationUrl": "https://github.com/Natteens/retropsx-urp",
+  "changelogUrl": "https://github.com/Natteens/retropsx-urp/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/Natteens/retropsx-urp/blob/main/LICENSE.md"
+}

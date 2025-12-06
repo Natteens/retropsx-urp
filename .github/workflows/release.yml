@@ -1,0 +1,59 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Filter Unity dependencies dynamically
+        run: |
+          # Verifica se o package.json existe e tem uma seção dependencies
+          if [ -f package.json ] && jq -e '.dependencies // empty | type=="object"' package.json > /dev/null; then
+            # Identifica pacotes relacionados à Unity no package.json e os remove
+            unity_packages=$(jq -r '.dependencies | keys[] | select(test("unity|Unity|com.unity"))' package.json 2>/dev/null || echo "")
+            echo "Pacotes Unity encontrados: $unity_packages"
+
+            if [ -n "$unity_packages" ]; then
+              echo "Removendo pacotes Unity..."
+              for pkg in $unity_packages; do
+                jq "del(.dependencies["$pkg"])" package.json > package.filtered.json
+                mv package.filtered.json package.json
+              done
+            fi
+          else
+            echo "Não foram encontradas dependências no package.json ou o arquivo não existe."
+          fi
+
+      - name: Install dependencies (no lock)
+        run: npm install --no-package-lock
+
+      - name: Release
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
