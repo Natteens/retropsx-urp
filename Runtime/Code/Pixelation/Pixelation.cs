@@ -1,8 +1,6 @@
-﻿using UnityEngine;
-using UnityEngine.Rendering;
-using UnityEngine.Rendering.Universal;
+﻿using UnityEngine.Rendering;
 
-namespace PSX
+namespace RetroPSXURP.Code.Pixelation
 {
     public class Pixelation : VolumeComponent, IPostProcessComponent
     {

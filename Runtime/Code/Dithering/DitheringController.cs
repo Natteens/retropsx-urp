@@ -1,8 +1,7 @@
-﻿using System;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace PSX
+namespace RetroPSXURP.Code.Dithering
 {
     [ExecuteInEditMode]
     public class DitheringController : MonoBehaviour

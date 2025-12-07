@@ -1,8 +1,7 @@
-﻿using System;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace PSX
+namespace RetroPSXURP.Code.Fog
 {
     [ExecuteInEditMode]
     public class FogController : MonoBehaviour

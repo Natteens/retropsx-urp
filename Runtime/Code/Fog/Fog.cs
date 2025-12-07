@@ -1,8 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.Rendering.Universal;
 
-namespace PSX
+namespace RetroPSXURP.Code.Fog
 {
     public class Fog : VolumeComponent, IPostProcessComponent
     {
