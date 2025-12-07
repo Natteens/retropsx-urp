@@ -1,3 +1,12 @@
-﻿fileFormatVersion: 2
+fileFormatVersion: 2
 guid: df6534dd185a4f18b50629b58de296b6
-timeCreated: 1587560875
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - pixelationShader: {fileID: 4800000, guid: 6cc37f589a3171847bd1dc6f9224ccf3, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

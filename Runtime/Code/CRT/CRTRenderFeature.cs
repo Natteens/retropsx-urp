@@ -7,7 +7,7 @@ namespace RetroPSXURP.Code.CRT
 {
     public class CRTRenderFeature : ScriptableRendererFeature
     {
-        [SerializeField] private Shader crtShader;
+        [HideInInspector] public Shader crtShader;
         CRTPass crtPass;
 
         public override void Create()

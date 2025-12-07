@@ -1783,7 +1783,7 @@
     "m_Title": "UnityObjectToClipPos",
     "m_Position": {
         "x": -3497.0,
-        "y": -436.0
+        "y": -435.99993896484377
     }
 }
 
@@ -4514,7 +4514,7 @@
     "m_ObjectId": "54c9b4db117640d88c810254761c0769",
     "m_Title": "Skybox Color",
     "m_Position": {
-        "x": 2513.0,
+        "x": 2512.999755859375,
         "y": 1358.0
     }
 }
@@ -5582,8 +5582,8 @@
     "m_ObjectId": "710a06698a86418482a89fa7b834d9f7",
     "m_Title": "Vertex Snapping",
     "m_Position": {
-        "x": 504.0,
-        "y": -417.0
+        "x": 503.9998474121094,
+        "y": -416.9999694824219
     }
 }
 
@@ -5795,7 +5795,7 @@
     "m_ObjectId": "77e3cb953a2441c6a7be9cccb8ed4a49",
     "m_Title": "UNITY_Z_0_FAR_FROM_CLIPSPACE",
     "m_Position": {
-        "x": -2603.0,
+        "x": -2603.000244140625,
         "y": -630.0
     }
 }
@@ -7888,7 +7888,7 @@
     "m_ObjectId": "bd80a2ed3cc5412a91d5464c1cb65125",
     "m_Title": "Regular UVs",
     "m_Position": {
-        "x": -1833.0,
+        "x": -1833.000244140625,
         "y": 839.0
     }
 }
@@ -8269,8 +8269,8 @@
     "m_ObjectId": "c6fcbeddf7bf44b5a75bd3aaa636e58b",
     "m_Title": "Using Vertex Jitter",
     "m_Position": {
-        "x": 1491.0,
-        "y": 11.0
+        "x": 1490.9998779296875,
+        "y": 10.999980926513672
     }
 }
 
@@ -8392,7 +8392,7 @@
     "m_ObjectId": "cb59536d9da847f19e551cbd8d729765",
     "m_Title": "Specular",
     "m_Position": {
-        "x": 1345.0,
+        "x": 1344.9998779296875,
         "y": 1383.0
     }
 }
@@ -8675,8 +8675,8 @@
     "m_ObjectId": "d4c377a597e94a7c8b9eea7a9224ee02",
     "m_Title": "Diffuse",
     "m_Position": {
-        "x": 1676.0,
-        "y": 946.0
+        "x": 1676.0001220703125,
+        "y": 946.0001220703125
     }
 }
 
@@ -9047,7 +9047,7 @@
     "m_ObjectId": "e052191ab8f8498ca34c4e4282031a4b",
     "m_Title": "Lighting",
     "m_Position": {
-        "x": 710.0,
+        "x": 709.9999389648438,
         "y": 1364.0
     }
 }
@@ -9413,7 +9413,7 @@
     "m_ObjectId": "ece1d9454d1a446cbc9b6d3790b30553",
     "m_Title": "Not Using Camera or Vertex Jitter",
     "m_Position": {
-        "x": 1634.0,
+        "x": 1633.9998779296875,
         "y": 439.0
     }
 }
@@ -9883,8 +9883,8 @@
     "m_ObjectId": "fd05a7d3776640eaadbe1cf31b16fc6e",
     "m_Title": "Using CameraClipping",
     "m_Position": {
-        "x": -165.0,
-        "y": -194.0
+        "x": -165.00001525878907,
+        "y": -193.99998474121095
     }
 }
 

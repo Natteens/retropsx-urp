@@ -7,7 +7,7 @@ namespace RetroPSXURP.Code. Dithering
 {
     public class DitheringRenderFeature : ScriptableRendererFeature
     {
-        [SerializeField] private Shader ditheringShader;
+        [HideInInspector] public Shader ditheringShader;
         DitheringPass ditheringPass;
 
         public override void Create()

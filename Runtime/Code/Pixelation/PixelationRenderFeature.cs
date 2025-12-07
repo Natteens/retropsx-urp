@@ -7,7 +7,7 @@ namespace RetroPSXURP. Code. Pixelation
 {
     public class PixelationRenderFeature : ScriptableRendererFeature
     {
-        [SerializeField] private Shader pixelationShader;
+        [HideInInspector] public Shader pixelationShader;
         PixelationPass pixelationPass;
 
         public override void Create()

@@ -7,7 +7,7 @@ namespace RetroPSXURP. Code.Fog
 {
     public class FogRenderFeature : ScriptableRendererFeature
     {
-        [SerializeField] private Shader fogShader;
+        [HideInInspector] public Shader fogShader;
         FogPass fogPass;
 
         public override void Create()

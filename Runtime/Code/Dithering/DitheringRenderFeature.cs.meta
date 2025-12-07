@@ -1,3 +1,12 @@
-﻿fileFormatVersion: 2
+fileFormatVersion: 2
 guid: 7a17da147615463497e4bd9e04f0dce1
-timeCreated: 1587797271
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - ditheringShader: {fileID: 4800000, guid: 0b3fbf35a693e2e42a255895e5be9dbd, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
