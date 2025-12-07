@@ -1,161 +1,158 @@
 ﻿using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine. Rendering.RenderGraphModule;
 
 namespace RetroPSXURP.Code.CRT
 {
     public class CRTRenderFeature : ScriptableRendererFeature
     {
+        [SerializeField] private Shader crtShader;
         CRTPass crtPass;
 
         public override void Create()
         {
-            crtPass = new CRTPass(RenderPassEvent.BeforeRenderingPostProcessing);
+            if (crtShader == null)
+            {
+                Debug. LogError("CRT Shader is not assigned in the Renderer Feature!");
+                return;
+            }
+
+            crtPass = new CRTPass(crtShader);
+            crtPass.renderPassEvent = RenderPassEvent. BeforeRenderingPostProcessing;
         }
 
-        //ScripstableRendererFeature is an abstract class, you need this method
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
-            renderer.EnqueuePass(crtPass);
+            if (crtPass != null && renderingData. cameraData.cameraType == CameraType.Game)
+            {
+                renderer.EnqueuePass(crtPass);
+            }
         }
 
-        public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
+        protected override void Dispose(bool disposing)
         {
-            crtPass.Setup(renderer.cameraColorTargetHandle);
+            crtPass?.Dispose();
         }
     }
 
-
     public class CRTPass : ScriptableRenderPass
     {
-        private static readonly string shaderPath = "PostEffect/CRTShader";
-        static readonly string k_RenderTag = "Render CRT Effects";
-        static readonly int MainTexId = Shader.PropertyToID("_MainTex");
-        static readonly int TempTargetId = Shader.PropertyToID("_TempTargetCRT");
+        private Material crtMaterial;
 
         static readonly int ScanLinesWeight = Shader.PropertyToID("_ScanlinesWeight");
         static readonly int NoiseWeight = Shader.PropertyToID("_NoiseWeight");
-        
         static readonly int ScreenBendX = Shader.PropertyToID("_ScreenBendX");
         static readonly int ScreenBendY = Shader.PropertyToID("_ScreenBendY");
         static readonly int VignetteAmount = Shader.PropertyToID("_VignetteAmount");
         static readonly int VignetteSize = Shader.PropertyToID("_VignetteSize");
         static readonly int VignetteRounding = Shader.PropertyToID("_VignetteRounding");
         static readonly int VignetteSmoothing = Shader.PropertyToID("_VignetteSmoothing");
-
         static readonly int ScanLinesDensity = Shader.PropertyToID("_ScanLinesDensity");
         static readonly int ScanLinesSpeed = Shader.PropertyToID("_ScanLinesSpeed");
         static readonly int NoiseAmount = Shader.PropertyToID("_NoiseAmount");
-
-        static readonly int ChromaticRed = Shader.PropertyToID("_ChromaticRed");
-        static readonly int ChromaticGreen = Shader.PropertyToID("_ChromaticGreen");
-        static readonly int ChromaticBlue = Shader.PropertyToID("_ChromaticBlue");
-        
-        static readonly int GrilleOpacity = Shader.PropertyToID("_GrilleOpacity");
-        static readonly int GrilleCounterOpacity = Shader.PropertyToID("_GrilleCounterOpacity");
-        static readonly int GrilleResolution = Shader.PropertyToID("_GrilleResolution");
-        static readonly int GrilleCounterResolution = Shader.PropertyToID("_GrilleCounterResolution");
+        static readonly int ChromaticRed = Shader. PropertyToID("_ChromaticRed");
+        static readonly int ChromaticGreen = Shader. PropertyToID("_ChromaticGreen");
+        static readonly int ChromaticBlue = Shader. PropertyToID("_ChromaticBlue");
+        static readonly int GrilleOpacity = Shader. PropertyToID("_GrilleOpacity");
+        static readonly int GrilleCounterOpacity = Shader. PropertyToID("_GrilleCounterOpacity");
+        static readonly int GrilleResolution = Shader. PropertyToID("_GrilleResolution");
+        static readonly int GrilleCounterResolution = Shader. PropertyToID("_GrilleCounterResolution");
         static readonly int GrilleBrightness = Shader.PropertyToID("_GrilleBrightness");
-        static readonly int GrilleUvRotation = Shader.PropertyToID("_GrilleUvRotation");
+        static readonly int GrilleUvRotation = Shader. PropertyToID("_GrilleUvRotation");
         static readonly int GrilleUvMidPoint = Shader.PropertyToID("_GrilleUvMidPoint");
         static readonly int GrilleShift = Shader.PropertyToID("_GrilleShift");
 
-        Crt m_Crt;
-        Material crtMaterial;
-        RenderTargetIdentifier currentTarget;
-
-        public CRTPass(RenderPassEvent evt)
+        public CRTPass(Shader shader)
         {
-            renderPassEvent = evt;
-            var shader = Shader.Find(shaderPath);
             if (shader == null)
             {
-                Debug.LogError("Shader not found (crt).");
+                Debug.LogError("CRT Shader is null!");
                 return;
             }
-
-            this.crtMaterial = CoreUtils.CreateEngineMaterial(shader);
+            this. crtMaterial = CoreUtils.CreateEngineMaterial(shader);
         }
 
-        public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
+        private class PassData
         {
-            if (this.crtMaterial == null)
+            internal TextureHandle source;
+            internal Material material;
+            internal Crt crtSettings;
+        }
+
+        private static void ExecutePass(PassData data, RasterGraphContext context)
+        {
+            if (data.material == null || data.crtSettings == null) return;
+
+            data.material.SetFloat(ScanLinesWeight, data.crtSettings.scanlinesWeight.value);
+            data. material.SetFloat(NoiseWeight, data.crtSettings. noiseWeight.value);
+            data. material.SetFloat(ScreenBendX, data.crtSettings.screenBendX.value);
+            data.material. SetFloat(ScreenBendY, data.crtSettings. screenBendY. value);
+            data.material.SetFloat(VignetteAmount, data.crtSettings.vignetteAmount.value);
+            data. material.SetFloat(VignetteSize, data.crtSettings.vignetteSize.value);
+            data.material. SetFloat(VignetteRounding, data.crtSettings.vignetteRounding.value);
+            data.material. SetFloat(VignetteSmoothing, data.crtSettings.vignetteSmoothing.value);
+            data. material.SetFloat(ScanLinesDensity, data.crtSettings.scanlinesDensity.value);
+            data. material.SetFloat(ScanLinesSpeed, data.crtSettings.scanlinesSpeed.value);
+            data. material.SetFloat(NoiseAmount, data.crtSettings. noiseAmount.value);
+            data. material.SetVector(ChromaticRed, data.crtSettings.chromaticRed. value);
+            data.material.SetVector(ChromaticGreen, data.crtSettings.chromaticGreen.value);
+            data. material.SetVector(ChromaticBlue, data.crtSettings.chromaticBlue.value);
+            data.material.SetFloat(GrilleOpacity, data.crtSettings.grilleOpacity.value);
+            data. material.SetFloat(GrilleCounterOpacity, data. crtSettings.grilleCounterOpacity.value);
+            data.material. SetFloat(GrilleResolution, data.crtSettings. grilleResolution.value);
+            data.material.SetFloat(GrilleCounterResolution, data.crtSettings.grilleCounterResolution.value);
+            data. material.SetFloat(GrilleBrightness, data. crtSettings.grilleBrightness.value);
+            data.material.SetFloat(GrilleUvRotation, data.crtSettings.grilleUvRotation.value);
+            data.material. SetFloat(GrilleUvMidPoint, data.crtSettings.grilleUvMidPoint.value);
+            data.material. SetVector(GrilleShift, data.crtSettings.grilleShift.value);
+
+            Blitter. BlitTexture(context.cmd, data.source, new Vector4(1, 1, 0, 0), data. material, 0);
+        }
+
+        public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
+        {
+            if (crtMaterial == null)
             {
-                Debug.LogError("Material not created.");
+                Debug.LogWarning("CRT Material is null, skipping pass");
                 return;
             }
 
-            if (!renderingData.cameraData.postProcessEnabled) return;
+            UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
+            UniversalResourceData resourceData = frameData. Get<UniversalResourceData>();
+
+            if (!cameraData.postProcessEnabled) return;
 
             var stack = VolumeManager.instance.stack;
+            var crtSettings = stack. GetComponent<Crt>();
+            if (crtSettings == null || !crtSettings.IsActive()) return;
 
-            this.m_Crt = stack.GetComponent<Crt>();
-            if (this.m_Crt == null)
+            TextureHandle cameraTex = resourceData.activeColorTexture;
+            if (!cameraTex.IsValid()) return;
+
+            var desc = renderGraph. GetTextureDesc(cameraTex);
+            desc.name = "_CRTDestination";
+            desc.clearBuffer = false;
+            TextureHandle destination = renderGraph.CreateTexture(desc);
+
+            using (var builder = renderGraph.AddRasterRenderPass<PassData>("CRT Effect Pass", out var passData))
             {
-                return;
+                passData.source = cameraTex;
+                passData.material = crtMaterial;
+                passData. crtSettings = crtSettings;
+
+                builder.UseTexture(passData.source, AccessFlags.Read);
+                builder. SetRenderAttachment(destination, 0, AccessFlags.Write);
+
+                builder. SetRenderFunc((PassData data, RasterGraphContext context) => ExecutePass(data, context));
             }
 
-            if (!this.m_Crt.IsActive())
-            {
-                return;
-            }
-
-            var cmd = CommandBufferPool.Get(k_RenderTag);
-            Render(cmd, ref renderingData);
-            context.ExecuteCommandBuffer(cmd);
-            CommandBufferPool.Release(cmd);
+            resourceData.cameraColor = destination;
         }
 
-        public void Setup(in RenderTargetIdentifier currentTarget)
+        public void Dispose()
         {
-            this.currentTarget = currentTarget;
-        }
-
-        void Render(CommandBuffer cmd, ref RenderingData renderingData)
-        {
-            ref var cameraData = ref renderingData.cameraData;
-            var source = currentTarget;
-            int destination = TempTargetId;
-
-            //getting camera width and height 
-            var w = cameraData.camera.scaledPixelWidth;
-            var h = cameraData.camera.scaledPixelHeight;
-
-            //setting parameters here 
-            cameraData.camera.depthTextureMode = cameraData.camera.depthTextureMode | DepthTextureMode.Depth;
-
-            this.crtMaterial.SetFloat(ScanLinesWeight, this.m_Crt.scanlinesWeight.value);
-            this.crtMaterial.SetFloat(NoiseWeight, this.m_Crt.noiseWeight.value);
-            
-            this.crtMaterial.SetFloat(ScreenBendX, this.m_Crt.screenBendX.value);
-            this.crtMaterial.SetFloat(ScreenBendY, this.m_Crt.screenBendY.value);
-            this.crtMaterial.SetFloat(VignetteAmount, this.m_Crt.vignetteAmount.value);
-            this.crtMaterial.SetFloat(VignetteSize, this.m_Crt.vignetteSize.value);
-            this.crtMaterial.SetFloat(VignetteRounding, this.m_Crt.vignetteRounding.value);
-            this.crtMaterial.SetFloat(VignetteSmoothing, this.m_Crt.vignetteSmoothing.value);
-
-            this.crtMaterial.SetFloat(ScanLinesDensity, this.m_Crt.scanlinesDensity.value);
-            this.crtMaterial.SetFloat(ScanLinesSpeed, this.m_Crt.scanlinesSpeed.value);
-            this.crtMaterial.SetFloat(NoiseAmount, this.m_Crt.noiseAmount.value);
-
-            this.crtMaterial.SetVector(ChromaticRed, this.m_Crt.chromaticRed.value);
-            this.crtMaterial.SetVector(ChromaticGreen, this.m_Crt.chromaticGreen.value);
-            this.crtMaterial.SetVector(ChromaticBlue, this.m_Crt.chromaticBlue.value);
-
-            this.crtMaterial.SetFloat(GrilleOpacity, this.m_Crt.grilleOpacity.value);
-            this.crtMaterial.SetFloat(GrilleCounterOpacity, this.m_Crt.grilleCounterOpacity.value);
-            this.crtMaterial.SetFloat(GrilleResolution, this.m_Crt.grilleResolution.value);
-            this.crtMaterial.SetFloat(GrilleCounterResolution, this.m_Crt.grilleCounterResolution.value);
-            this.crtMaterial.SetFloat(GrilleBrightness, this.m_Crt.grilleBrightness.value);
-            this.crtMaterial.SetFloat(GrilleUvRotation, this.m_Crt.grilleUvRotation.value);
-            this.crtMaterial.SetFloat(GrilleUvMidPoint, this.m_Crt.grilleUvMidPoint.value);
-            this.crtMaterial.SetVector(GrilleShift, this.m_Crt.grilleShift.value);
-            
-            int shaderPass = 0;
-            cmd.SetGlobalTexture(MainTexId, source);
-            cmd.GetTemporaryRT(destination, w, h, 0, FilterMode.Point, RenderTextureFormat.Default);
-            cmd.Blit(source, destination);
-            cmd.Blit(destination, source, this.crtMaterial, shaderPass);
+            CoreUtils.Destroy(crtMaterial);
         }
     }
 }

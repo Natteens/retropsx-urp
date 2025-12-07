@@ -1,117 +1,110 @@
-﻿// Upgrade NOTE: replaced '_Object2World' with 'unity_ObjectToWorld'
-
-Shader "PostEffect/Fog"
+﻿Shader "PostEffect/Fog"
 {
     Properties
     {
         _MainTex("Texture", 2D) = "white" {}
     }
-    
-    CGINCLUDE
-        #include "UnityCG.cginc"
-        #include "./cginc/voronoi.cginc"
-        sampler2D _MainTex;
-        sampler2D _CameraDepthTexture;
-        
-        float _FogDensity;
-        float _FogDistance;
-        float4 _FogColor;
-        float4 _AmbientColor;
-        
-        float _FogNear;
-        float _FogFar;
-        float _FogAltScale;
-        float _FogThinning;
-        
-        float _NoiseScale;
-        float _NoiseStrength;
 
-        struct appdata
+    HLSLINCLUDE
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+    #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
+
+    TEXTURE2D(_CameraDepthTexture);
+    SAMPLER(sampler_CameraDepthTexture);
+
+    float _FogDensity;
+    float _FogDistance;
+    float4 _FogColor;
+    float4 _AmbientColor;
+
+    float _FogNear;
+    float _FogFar;
+    float _FogAltScale;
+    float _FogThinning;
+
+    float _NoiseScale;
+    float _NoiseStrength;
+
+    // Voronoi noise functions
+    float2 voronoiRandom2(float2 p)
+    {
+        return frac(sin(float2(dot(p, float2(127.1, 311.7)), dot(p, float2(269.5, 183.3)))) * 43758.5453);
+    }
+
+    float cnoise(float2 p)
+    {
+        float2 i_st = floor(p);
+        float2 f_st = frac(p);
+
+        float m_dist = 1.0;
+
+        for (int y = -1; y <= 1; y++)
         {
-            float4 vertex : POSITION;
-            float2 uv : TEXCOORD0;
-        };
-        
-        struct v2f
-        {
-            float4 vertex : SV_POSITION;
-            float2 uv : TEXCOORD0;
-            float2 screenPosition : TEXCOORD1;
-            float4 worldPos : TEXCOORD2;
-        };
-        
-        
-        float ComputeDistance(float depth)
-        {
-            float dist = depth * _ProjectionParams.z;
-            dist -= _ProjectionParams.y * _FogDistance;
-            return dist;
-        }
-        
-        half ComputeFog(float z, float _Density)
-        {
-            half fog = 0.0;
-            fog = exp2(_Density * z);
-            //fog = _Density * z;
-            //fog = exp2(-fog * fog);
-            return saturate(fog);
+            for (int x = -1; x <= 1; x++)
+            {
+                float2 neighbor = float2(float(x), float(y));
+                float2 randomPoint = voronoiRandom2(i_st + neighbor);
+                randomPoint = 0.5 + 0.5 * sin(_Time.y + 6.2831 * randomPoint);
+                float2 diff = neighbor + randomPoint - f_st;
+                float dist = length(diff);
+                m_dist = min(m_dist, dist);
+            }
         }
 
-        v2f Vert(appdata v)
-        {
-            v2f o;
-            o.vertex = UnityObjectToClipPos(v.vertex);
-            o.uv = v.uv;
-            o.worldPos = mul(unity_ObjectToWorld, v.vertex);
-            o.screenPosition = ComputeScreenPos(o.vertex);
-            return o;
-        }
+        return m_dist;
+    }
 
-        float4 Frag (v2f i) : SV_Target
-        {
-            //uvs
-            float2 screenPos = i.screenPosition.xy;
-            float2 screenParam = _ScreenParams.xy;
-            float2 uv = i.uv;
-            
-            //base texture 
-            float4 Color = tex2D(_MainTex, uv) ;            
-            
-            //lighting 
-            float3 worldCam = _WorldSpaceCameraPos;
-            float3 lightDirection = normalize(_WorldSpaceLightPos0.xyz);
-            float3 viewDirection = normalize(float3(float4(_WorldSpaceCameraPos.xyz, 1.0) - i.worldPos.xyz));
-            //float d = length(viewDirection);
-            //float l = saturate((d - _FogNear) / (_FogFar - _FogNear) / clamp(i.worldPos.y / _FogAltScale + 1, 1, _FogThinning));
-            
-            //background and color 
-            float4 ambientColor = _AmbientColor; //float4(0.1,0.1,0.1,0.1);
-            float4 background = tex2D(_MainTex, i.uv);
-            
-            //depth handling
-            float Depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
-            float linearDepth = Linear01Depth(Depth);
-            //float finalDepth = linearDepth * _FogDistance;
-            
-            float dist = ComputeDistance(Depth);
-            float fog = 1.0 - ComputeFog(dist, _FogDensity);
- 
-            float screenNoise = cnoise(screenPos * screenParam / _NoiseScale);            
-  
-            return lerp(Color, _FogColor * ambientColor , saturate(fog + (screenNoise * _NoiseStrength)) );
-        }
-    ENDCG
-    
+    float ComputeDistance(float depth)
+    {
+        float dist = depth * _ProjectionParams.z;
+        dist -= _ProjectionParams.y * _FogDistance;
+        return dist;
+    }
+
+    half ComputeFog(float z, float density)
+    {
+        half fog = exp2(density * z);
+        return saturate(fog);
+    }
+
+    half4 Frag(Varyings input) : SV_Target
+    {
+        float2 uv = input.texcoord;
+
+        // Base texture
+        half4 color = SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, uv);
+
+        // Depth
+        float depth = SAMPLE_TEXTURE2D(_CameraDepthTexture, sampler_CameraDepthTexture, uv).r;
+        float dist = ComputeDistance(depth);
+        float fog = 1.0 - ComputeFog(dist, _FogDensity);
+
+        // Screen noise
+        float2 screenPos = uv;
+        float2 screenParam = _ScreenParams.xy;
+        float screenNoise = cnoise(screenPos * screenParam / _NoiseScale);
+
+        // Mix fog
+        half4 foggedColor = lerp(color, _FogColor * _AmbientColor, saturate(fog + (screenNoise * _NoiseStrength)));
+
+        return foggedColor;
+    }
+    ENDHLSL
+
     SubShader
     {
-        Cull Off ZWrite Off ZTest Always
-        Tags { "RenderPipeline" = "UniversalPipeline"}
+        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" }
+        LOD 100
+        ZWrite Off Cull Off ZTest Always
+
         Pass
         {
-            CGPROGRAM
-                #pragma vertex Vert
-                #pragma fragment Frag
-            ENDCG
+            Name "Fog Effect"
+
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment Frag
+            ENDHLSL
         }
     }
 }

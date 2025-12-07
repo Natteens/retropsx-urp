@@ -1,108 +1,120 @@
 ﻿using UnityEngine;
-using UnityEngine.Rendering;
-using UnityEngine.Rendering.Universal;
+using UnityEngine. Rendering;
+using UnityEngine. Rendering.Universal;
+using UnityEngine. Rendering.RenderGraphModule;
 
-namespace RetroPSXURP.Code.Pixelation
+namespace RetroPSXURP. Code. Pixelation
 {
     public class PixelationRenderFeature : ScriptableRendererFeature
     {
+        [SerializeField] private Shader pixelationShader;
         PixelationPass pixelationPass;
 
         public override void Create()
         {
-            pixelationPass = new PixelationPass(RenderPassEvent.BeforeRenderingPostProcessing);
+            if (pixelationShader == null)
+            {
+                Debug.LogError("Pixelation Shader is not assigned in the Renderer Feature!");
+                return;
+            }
+
+            pixelationPass = new PixelationPass(pixelationShader);
+            pixelationPass.renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
         }
 
-        //ScripstableRendererFeature is an abstract class, you need this method
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
-            renderer.EnqueuePass(pixelationPass);
+            if (pixelationPass != null && renderingData.cameraData.cameraType == CameraType.Game)
+            {
+                renderer.EnqueuePass(pixelationPass);
+            }
         }
-        
-        public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
+
+        protected override void Dispose(bool disposing)
         {
-            pixelationPass.Setup(renderer.cameraColorTargetHandle);
+            pixelationPass?. Dispose();
         }
     }
-    
-    
+
     public class PixelationPass : ScriptableRenderPass
     {
-        private static readonly string shaderPath = "PostEffect/Pixelation";
-        static readonly string k_RenderTag = "Render Pixelation Effects";
-        static readonly int MainTexId = Shader.PropertyToID("_MainTex");
-        static readonly int TempTargetId = Shader.PropertyToID("_TempTargetPixelation");
-        
-        //PROPERTIES
-        static readonly int WidthPixelation = Shader.PropertyToID("_WidthPixelation");
-        static readonly int HeightPixelation = Shader.PropertyToID("_HeightPixelation");
-        static readonly int ColorPrecison = Shader.PropertyToID("_ColorPrecision");
+        private Material pixelationMaterial;
 
-        
-        Pixelation pixelation;
-        Material pixelationMaterial;
-        RenderTargetIdentifier currentTarget;
-    
-        public PixelationPass(RenderPassEvent evt)
+        static readonly int WidthPixelation = Shader. PropertyToID("_WidthPixelation");
+        static readonly int HeightPixelation = Shader.PropertyToID("_HeightPixelation");
+        static readonly int ColorPrecision = Shader. PropertyToID("_ColorPrecision");
+
+        public PixelationPass(Shader shader)
         {
-            renderPassEvent = evt;
-            var shader = Shader.Find(shaderPath);
             if (shader == null)
             {
-                Debug.LogError("Shader not found.");
+                Debug.LogError("Pixelation Shader is null!");
                 return;
             }
             this.pixelationMaterial = CoreUtils.CreateEngineMaterial(shader);
         }
-    
-        public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
+
+        private class PassData
         {
-            if (this.pixelationMaterial == null)
+            internal TextureHandle source;
+            internal Material material;
+            internal Pixelation pixelationSettings;
+        }
+
+        private static void ExecutePass(PassData data, RasterGraphContext context)
+        {
+            if (data.material == null || data.pixelationSettings == null) return;
+
+            data.material.SetFloat(WidthPixelation, data. pixelationSettings. widthPixelation. value);
+            data.material.SetFloat(HeightPixelation, data.pixelationSettings.heightPixelation.value);
+            data. material.SetFloat(ColorPrecision, data.pixelationSettings.colorPrecision.value);
+
+            Blitter.BlitTexture(context.cmd, data.source, new Vector4(1, 1, 0, 0), data.material, 0);
+        }
+
+        public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
+        {
+            if (pixelationMaterial == null)
             {
-                Debug.LogError("Material not created.");
+                Debug. LogWarning("Pixelation Material is null, skipping pass");
                 return;
             }
-    
-            if (!renderingData.cameraData.postProcessEnabled) return;
-    
-            var stack = VolumeManager.instance.stack;
-            
-            this.pixelation = stack.GetComponent<Pixelation>();
-            if (this.pixelation == null) { return; }
-            if (!this.pixelation.IsActive()) { return; }
-    
-            var cmd = CommandBufferPool.Get(k_RenderTag);
-            Render(cmd, ref renderingData);
-            context.ExecuteCommandBuffer(cmd);
-            CommandBufferPool.Release(cmd);
-        }
-    
-        public void Setup(in RenderTargetIdentifier currentTarget)
-        {
-            this.currentTarget = currentTarget;
-        }
-    
-        void Render(CommandBuffer cmd, ref RenderingData renderingData)
-        {
-            ref var cameraData = ref renderingData.cameraData;
-            var source = currentTarget;
-            int destination = TempTargetId;
-    
-            //getting camera width and height 
-            var w = cameraData.camera.scaledPixelWidth;
-            var h = cameraData.camera.scaledPixelHeight;
-            
-            //setting parameters here 
-            cameraData.camera.depthTextureMode = cameraData.camera.depthTextureMode | DepthTextureMode.Depth;
-            this.pixelationMaterial.SetFloat(WidthPixelation, this.pixelation.widthPixelation.value);
-            this.pixelationMaterial.SetFloat(HeightPixelation, this.pixelation.heightPixelation.value);
-            this.pixelationMaterial.SetFloat(ColorPrecison, this.pixelation.colorPrecision.value);
 
-            int shaderPass = 0;
-            cmd.SetGlobalTexture(MainTexId, source);
-            cmd.GetTemporaryRT(destination, w, h, 0, FilterMode.Point, RenderTextureFormat.Default);
-            cmd.Blit(source, destination);
-            cmd.Blit(destination, source, this.pixelationMaterial, shaderPass);
+            UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
+            UniversalResourceData resourceData = frameData.Get<UniversalResourceData>();
+
+            if (! cameraData.postProcessEnabled) return;
+
+            var stack = VolumeManager.instance.stack;
+            var pixelationSettings = stack.GetComponent<Pixelation>();
+            if (pixelationSettings == null || ! pixelationSettings. IsActive()) return;
+
+            TextureHandle cameraTex = resourceData.activeColorTexture;
+            if (! cameraTex.IsValid()) return;
+
+            var desc = renderGraph.GetTextureDesc(cameraTex);
+            desc.name = "_PixelationDestination";
+            desc.clearBuffer = false;
+            TextureHandle destination = renderGraph.CreateTexture(desc);
+
+            using (var builder = renderGraph.AddRasterRenderPass<PassData>("Pixelation Effect Pass", out var passData))
+            {
+                passData.source = cameraTex;
+                passData.material = pixelationMaterial;
+                passData. pixelationSettings = pixelationSettings;
+
+                builder.UseTexture(passData.source, AccessFlags.Read);
+                builder. SetRenderAttachment(destination, 0, AccessFlags.Write);
+
+                builder.SetRenderFunc((PassData data, RasterGraphContext context) => ExecutePass(data, context));
+            }
+
+            resourceData.cameraColor = destination;
+        }
+
+        public void Dispose()
+        {
+            CoreUtils.Destroy(pixelationMaterial);
         }
     }
 }

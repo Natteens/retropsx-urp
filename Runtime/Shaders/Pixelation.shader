@@ -4,64 +4,46 @@
     {
         _MainTex("Texture", 2D) = "white" {}
     }
-    
-    CGINCLUDE
-        #include "UnityCG.cginc"
-    
-        sampler2D _MainTex;  
-        
-        //for Pixelation      
-        float _WidthPixelation;
-        float _HeightPixelation;
-        
-        //for color precision
-        float _ColorPrecision;
-        
-        struct appdata
-        {
-            float4 vertex : POSITION;
-            float2 uv : TEXCOORD0;
-        };
 
-        struct v2f
-        {
-            float2 uv : TEXCOORD0;
-            float4 vertex : SV_POSITION;
-        };
-        
-        
-        v2f Vert(appdata v)
-        {
-            v2f o;
-            o.vertex = UnityObjectToClipPos(v.vertex);
-            o.uv = v.uv;
-            return o;
-        }
+    HLSLINCLUDE
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+    #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
 
-        float4 Frag (v2f i) : SV_Target
-        {
-            //pixelation 
-            float2 uv = i.uv;
-            uv.x = floor(uv.x * _WidthPixelation) / _WidthPixelation;
-            uv.y = floor(uv.y * _HeightPixelation) / _HeightPixelation;
-            
-            float4 Color = tex2D(_MainTex, uv) ;
-            //color precision
-            Color = floor(Color * _ColorPrecision)/_ColorPrecision;
-            return Color;
-        }
-    ENDCG
-    
+    float _WidthPixelation;
+    float _HeightPixelation;
+    float _ColorPrecision;
+
+    half4 Frag(Varyings input) : SV_Target
+    {
+        float2 uv = input.texcoord;
+        
+        // Pixelation
+        uv. x = floor(uv.x * _WidthPixelation) / _WidthPixelation;
+        uv.y = floor(uv.y * _HeightPixelation) / _HeightPixelation;
+
+        half4 color = SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, uv);
+        
+        // Color precision
+        color = floor(color * _ColorPrecision) / _ColorPrecision;
+        
+        return color;
+    }
+    ENDHLSL
+
     SubShader
     {
-        Cull Off ZWrite Off ZTest Always
-        Tags { "RenderPipeline" = "UniversalPipeline"}
+        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" }
+        LOD 100
+        ZWrite Off Cull Off ZTest Always
+
         Pass
         {
-            CGPROGRAM
-                #pragma vertex Vert
-                #pragma fragment Frag
-            ENDCG
+            Name "Pixelation Effect"
+
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment Frag
+            ENDHLSL
         }
     }
 }
