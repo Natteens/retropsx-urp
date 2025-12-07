@@ -2,7 +2,7 @@
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-namespace PSX
+namespace RetroPSXURP.Code.CRT
 {
     public class CRTRenderFeature : ScriptableRendererFeature
     {
