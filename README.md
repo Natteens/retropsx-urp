@@ -1,28 +1,34 @@
+<div align="center">
+
 # RetroPSX-URP
 
-PSX retro graphics package for URP with Shader Graph in Unity.
+A compact set of PSX-inspired rendering tools for Unity URP.
 
-## Requisitos
+[![Release](https://img.shields.io/github/v/release/Natteens/retropsx-urp?style=flat-square)](https://github.com/Natteens/retropsx-urp/releases)
+[![Unity](https://img.shields.io/badge/Unity-6000.0%2B-000000?style=flat-square&logo=unity)](https://unity.com)
+[![URP](https://img.shields.io/badge/URP-17.0.3%2B-555555?style=flat-square)](https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@17.0/manual/index.html)
+[![License](https://img.shields.io/github/license/Natteens/retropsx-urp?style=flat-square)](LICENSE.md)
 
-- Unity 6000.0 ou superior
-- Universal Render Pipeline 17.0.3 ou uma versão compatível fornecida pelo Editor
+</div>
 
-O Shader Graph é fornecido junto dos pacotes gráficos do Editor e não precisa ser declarado separadamente.
+RetroPSX-URP combines renderer features and Shader Graph assets for projects that want a stylized low-resolution look without replacing the normal URP workflow.
 
-## Instalação
+## Features
 
-### Via Package Manager
+- CRT, dithering, fog and pixelation renderer effects.
+- Lit and unlit PSX-style Shader Graph assets.
+- Vertex warping material variants.
+- URP-native project integration.
 
-1. Abra `Window > Package Manager`.
-2. Clique no botão `+`.
-3. Selecione `Add package from git URL...`.
-4. Use:
+## Installation
+
+Add the package through `Window > Package Manager > Add package from git URL`:
 
 ```text
 https://github.com/Natteens/retropsx-urp.git
 ```
 
-### Via manifest.json
+Or add it to `Packages/manifest.json`:
 
 ```json
 {
@@ -32,16 +38,19 @@ https://github.com/Natteens/retropsx-urp.git
 }
 ```
 
-A dependência do URP é declarada no `package.json` e será resolvida pelo Unity Package Manager.
+The URP dependency is declared by the package. Shader Graph is supplied through Unity's graphics packages.
 
-## Como usar
+## Quick start
 
-*Documentação em desenvolvimento.*
+1. Select the active URP Renderer asset.
+2. Add the renderer features needed by the project.
+3. Configure their intensity in the renderer inspector.
+4. Use the provided Shader Graph assets on materials that need vertex warping or the package material style.
 
-## Changelog
+## Documentation
 
-Veja o [CHANGELOG.md](CHANGELOG.md) para detalhes sobre mudanças e atualizações.
+Effect setup, workflow guidance and troubleshooting are available in [Documentation](Documentation~/index.md).
 
-## Licença
+## License
 
-Este projeto está licenciado sob a Licença MIT. Veja [LICENSE.md](LICENSE.md).
+MIT. See [LICENSE.md](LICENSE.md).
