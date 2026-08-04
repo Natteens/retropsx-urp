@@ -14,6 +14,9 @@
     "url": "https://github.com/Natteens"
   },
   "unity": "6000.0",
+  "dependencies": {
+    "com.unity.render-pipelines.universal": "17.0.3"
+  },
   "documentationUrl": "https://github.com/Natteens/retropsx-urp",
   "changelogUrl": "https://github.com/Natteens/retropsx-urp/blob/main/CHANGELOG.md",
   "licensesUrl": "https://github.com/Natteens/retropsx-urp/blob/main/LICENSE.md"
