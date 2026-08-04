@@ -27,28 +27,8 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Filter Unity dependencies dynamically
-        run: |
-          # Verifica se o package.json existe e tem uma seção dependencies
-          if [ -f package.json ] && jq -e '.dependencies // empty | type=="object"' package.json > /dev/null; then
-            # Identifica pacotes relacionados à Unity no package.json e os remove
-            unity_packages=$(jq -r '.dependencies | keys[] | select(test("unity|Unity|com.unity"))' package.json 2>/dev/null || echo "")
-            echo "Pacotes Unity encontrados: $unity_packages"
-
-            if [ -n "$unity_packages" ]; then
-              echo "Removendo pacotes Unity..."
-              for pkg in $unity_packages; do
-                jq "del(.dependencies["$pkg"])" package.json > package.filtered.json
-                mv package.filtered.json package.json
-              done
-            fi
-          else
-            echo "Não foram encontradas dependências no package.json ou o arquivo não existe."
-          fi
-
-      - name: Install dependencies (no lock)
-        run: npm install --no-package-lock
-
+      # package.json is a Unity package manifest. Its dependencies are UPM
+      # dependencies and must remain unchanged in published tags.
       - name: Release
         uses: cycjimmy/semantic-release-action@v4
         with:
