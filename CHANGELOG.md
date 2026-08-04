@@ -1,3 +1,12 @@
+## [0.1.1](https://github.com/Natteens/retropsx-urp/compare/v0.1.0...v0.1.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* correct package identifier and requirements ([5fa992a](https://github.com/Natteens/retropsx-urp/commit/5fa992a2d76382524c194544a4f71a6db8bd021d))
+* declare URP dependency ([4c51d5a](https://github.com/Natteens/retropsx-urp/commit/4c51d5a0a84933d2d6b4090ba492e78d0b07dc09))
+* preserve UPM dependencies during release [skip ci] ([98230ee](https://github.com/Natteens/retropsx-urp/commit/98230ee6321608b39442311fe807d1ddd6d459f3))
+
 # 📝 Changelog
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
