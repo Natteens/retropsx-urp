@@ -1,39 +1,47 @@
 # RetroPSX-URP
 
-PSX retro graphics package for URP with Shadergraph in Unity
+PSX retro graphics package for URP with Shader Graph in Unity.
 
-## 📥 Instalação
+## Requisitos
 
-Este pacote pode ser instalado através do Unity Package Manager usando a URL do Git.
+- Unity 6000.0 ou superior
+- Universal Render Pipeline 17.0.3 ou uma versão compatível fornecida pelo Editor
 
-### Via Package Manager (Recomendado)
+O Shader Graph é fornecido junto dos pacotes gráficos do Editor e não precisa ser declarado separadamente.
 
-1. Abra o Package Manager (Window > Package Manager)
-2. Clique no botão **+** no canto superior esquerdo
-3. Selecione **"Add package from git URL..."**
-4. Digite a URL: `https://github.com/Natteens/retropsx-urp.git`
-5. Clique em **Add**
+## Instalação
+
+### Via Package Manager
+
+1. Abra `Window > Package Manager`.
+2. Clique no botão `+`.
+3. Selecione `Add package from git URL...`.
+4. Use:
+
+```text
+https://github.com/Natteens/retropsx-urp.git
+```
 
 ### Via manifest.json
-
-Adicione a seguinte linha ao arquivo `Packages/manifest.json` do seu projeto:
 
 ```json
 {
   "dependencies": {
-    "com.example.retropsx-urp": "https://github.com/Natteens/retropsx-urp.git"
+    "com.natteens.retropsxurp": "https://github.com/Natteens/retropsx-urp.git"
   }
 }
 ```
 
-## 🚀 Como Usar
+A dependência do URP é declarada no `package.json` e será resolvida pelo Unity Package Manager.
 
-*Documentação em desenvolvimento*
+## Como usar
 
-## 📝 Changelog
+*Documentação em desenvolvimento.*
+
+## Changelog
 
 Veja o [CHANGELOG.md](CHANGELOG.md) para detalhes sobre mudanças e atualizações.
 
-## 📄 Licença
+## Licença
 
-Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE.md](LICENSE.md) para detalhes.
+Este projeto está licenciado sob a Licença MIT. Veja [LICENSE.md](LICENSE.md).
