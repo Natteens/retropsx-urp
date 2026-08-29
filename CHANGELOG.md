@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/Natteens/retropsx-urp/compare/v1.0.0...v1.1.0) (2026-08-29)
+
+
+### Features
+
+* preserve native UI rendering ([eb36bee](https://github.com/Natteens/retropsx-urp/commit/eb36bee9bd25e778099b6ae4005e0cedebeb172c))
+
 # [1.0.0](https://github.com/Natteens/retropsx-urp/compare/v0.1.1...v1.0.0) (2026-08-29)
 
 
