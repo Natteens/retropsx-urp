@@ -1,3 +1,13 @@
+# [1.0.0](https://github.com/Natteens/retropsx-urp/compare/v0.1.1...v1.0.0) (2026-08-29)
+
+
+* feat!: rebuild RetroPSX rendering pipeline ([cb4fd97](https://github.com/Natteens/retropsx-urp/commit/cb4fd97763f2858d5c13cbdd305661f6bbc09bb8))
+
+
+### BREAKING CHANGES
+
+* removes the previous CRT, dithering, fog, pixelation, controller, Shader Graph, and legacy material APIs in favor of the new RetroPSX pipeline architecture.
+
 # Changelog
 
 Notable changes to RetroPSX-URP are documented here. The project follows [Semantic Versioning](https://semver.org/).
