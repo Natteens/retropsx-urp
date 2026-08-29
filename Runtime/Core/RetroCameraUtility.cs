@@ -32,6 +32,14 @@ namespace RetroPSX
             return default;
         }
 
+        public static bool SupportsNativeWorldSpaceUI(CameraType cameraType, bool isOverlay)
+        {
+            if (isOverlay)
+                return false;
+
+            return cameraType is CameraType.Game or CameraType.SceneView;
+        }
+
         public static RetroRasterContext BuildRasterContext(
             RetroRasterProfile raster,
             int sourceWidth,

@@ -23,6 +23,7 @@ namespace RetroPSX.Editor
             DrawSection("Atmosphere", "fog");
             DrawSection("Volumetrics (Modern)", "volumetrics");
             DrawSection("Display (Modern)", "display");
+            DrawSection("UI", "ui");
             DrawSection("Debug", "debug");
             serializedObject.ApplyModifiedProperties();
 

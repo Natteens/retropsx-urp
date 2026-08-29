@@ -1,6 +1,8 @@
 namespace RetroPSX
 {
     public enum RetroSceneViewMode { Off, WorldEffects, FullPipeline }
+    /// <summary>Controls whether a world-space UI Toolkit panel is composed after the RetroPSX presentation or inside it.</summary>
+    public enum RetroUIRenderMode { Native, Retro }
     public enum RetroRasterMode { Native, FixedResolution, InternalHeight, ScaleFactor }
     public enum RetroResolutionPreset { Custom, R256x224, R320x240, R320x180, R368x240, R512x240 }
     public enum RetroPresentationMode { Stretch, AspectFit, IntegerFit }

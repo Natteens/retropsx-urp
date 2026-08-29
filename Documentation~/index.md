@@ -39,6 +39,7 @@ The root profile references these setting assets:
 - `RetroFogProfile`: distance color, distance modulation, and stepped distance color fog
 - `RetroVolumetricProfile`: raymarch quality and integration controls
 - `RetroDisplayProfile`: optional CRT/display modules
+- `RetroUIProfile` (optional): native versus Retro world-space UI policy and its reserved native UI layer
 - `RetroDebugProfile`: diagnostic output mode
 
 `RetroTextureProfile` and `RetroVolumetricPattern` are independent authoring assets. Profiles contain settings only; they never own GPU resources. **Create Complete Profile Set** creates linked assets with defaults, not artistic looks.
@@ -52,8 +53,10 @@ The root profile references these setting assets:
 5. **Volumetric composite, optional:** depth-aware reconstruction composites scattering and transmittance into the canonical image.
 6. **Point presentation when scaling is needed:** fill the camera output or use the explicitly selected Aspect Fit/Integer Fit viewport.
 7. **Display simulation, optional:** run the CRT modules once at output resolution.
-8. **Normal URP post-processing and final resolve.**
-9. **Material-state reset, after rendering:** restore the neutral 1×1 context, disable all material effects, and clear the transient volumetric texture binding.
+8. **Native world-space UI, optional:** redraw the reserved native UI layer after RetroPSX presentation, while the camera's opaque depth and stencil attachment is still available. This is omitted unless the profile is complete and a Native UI layer is configured.
+9. **Normal URP post-processing and final resolve.** Native world-space UI skips RetroPSX image treatment, but later generic URP post-processing can still affect it.
+10. **Screen-space overlay UI.** Screen-space overlay UI remains on URP's normal final overlay path.
+11. **Material-state reset, after rendering:** restore the neutral 1×1 context, disable all material effects, and clear the transient volumetric texture binding.
 
 The feature never reads the backbuffer. Each stage publishes the next `UniversalResourceData.cameraColor`. Native/full-size Stretch output skips the presentation copy.
 
@@ -98,6 +101,23 @@ The PSX matrix is:
 ```
 
 Material dithering is locked to canonical pixel coordinates and runs before material quantization. Custom and blue-noise patterns are final-image options. Final-image quantization is an explicit opt-in for ordinary URP materials or for folding transparent and atmospheric blends back onto the palette. When volumetrics run, this processing is deferred until after their composite so the frame is quantized once. Leave it disabled when integrated materials already provide the desired palette treatment.
+
+## UI Toolkit composition
+
+Screen-space UI is left to URP/UI Toolkit and stays native by default. It is not part of the RetroPSX canonical resolve, final-image dither/quantization, or display pass.
+
+For world-space UI, add `RetroPSXUI` to the GameObject that owns the UI Toolkit renderer. It supports two explicit choices:
+
+- **Native** is the default marker policy. Choose a free project layer in `RetroUIProfile`; the package leaves it unconfigured by default and never claims layer 30 or any other user layer. Exclude the chosen layer from the Universal Renderer prepass, opaque, and transparent layer masks. `RetroPSXUI` preserves the object's original layer, temporarily applies the configured layer in Native mode, and restores the original in Retro mode or when disabled. RetroPSX redraws the chosen layer after its presentation pass. The redraw uses the active camera depth/stencil attachment: text stays native-resolution and sharp while still being hidden by opaque world geometry.
+- **Retro** uses the restored original GameObject layer. It follows normal URP drawing and therefore intentionally participates in the configured raster grid, final-image processing, and CRT/display pass.
+
+This is a renderer configuration requirement rather than a material override: RetroPSX never swaps UI shaders, re-renders arbitrary objects, creates an extra camera, or allocates a persistent UI texture. The native layer must contain only panels intended for this late redraw. Because Native UI is deliberately composed after the opaque/transparent scene presentation, exact sorting against arbitrary transparent world materials is not available; opaque depth occlusion and UI Toolkit clipping/stencil behavior are preserved.
+
+The GameObject layer is required because the Universal Renderer opaque and transparent passes cannot exclude a renderer using `renderingLayerMask`; using a rendering layer only for the late pass would draw the panel twice. Native mode therefore changes only the marked renderer GameObject's layer, never its children. Physics, raycasts, camera culling, and other layer-based systems observe that temporary layer. Keep gameplay colliders or interaction components on separate GameObjects when their layer must remain unchanged. The original layer is serialized and restored when switching to Retro, disabling or removing the marker, or destroying the marked object.
+
+The runtime marker is independent of the UI Toolkit renderer class and has no serialized or static dependency on `PanelRenderer` or `UIRenderer`. The development authoring helper uses the direct `PanelRenderer` API only behind `UNITY_6000_5_OR_NEWER`. Unity 6000.5.7f1 with `PanelRenderer` was runtime-tested; the architecture remains compile-time compatible with the package's Unity 6000.0 minimum, but Unity 6000.0–6000.4 were not launched for this validation.
+
+The development test scene at `Assets/RetroPSXTest/RetroPSXTestScene.unity` contains a small UI validation area. Its authoring helper creates two Native world panels, one Retro world panel, and a screen-space panel, along with their `PanelSettings` assets. The test project deliberately reserves layer 30 as `RetroPSX Native UI` and excludes that layer from the test renderer's opaque and transparent masks; this is test-project configuration, not a package default. Run **Tools > RetroPSX > Create UI Validation** if the test objects need to be recreated.
 
 ## Shader compatibility
 

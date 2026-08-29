@@ -18,6 +18,7 @@ namespace RetroPSX.Rendering
         private RetroPSXGlobalSetupPass setupPass;
         private RetroPSXGlobalSetupPass resetPass;
         private RetroPSXPostPass postPass;
+        private RetroPSXNativeUIPass nativeUIPass;
 
         public RetroPSXPipelineProfile Profile => profile;
 
@@ -42,6 +43,10 @@ namespace RetroPSX.Rendering
             {
                 renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing
             };
+            nativeUIPass = new RetroPSXNativeUIPass
+            {
+                renderPassEvent = (RenderPassEvent)((int)RenderPassEvent.BeforeRenderingPostProcessing + 1)
+            };
         }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -64,6 +69,17 @@ namespace RetroPSX.Rendering
                 postPass.SetProfile(profile, policy.FullPipeline);
                 postPass.ConfigureInput(ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Depth);
                 renderer.EnqueuePass(postPass);
+            }
+
+            bool supportsNativeUI = profile != null
+                && profile.IsComplete
+                && profile.UI != null
+                && RetroCameraUtility.SupportsNativeWorldSpaceUI(renderingData.cameraData.cameraType, overlay);
+            if (supportsNativeUI && nativeUIPass != null)
+            {
+                nativeUIPass.SetProfile(profile);
+                nativeUIPass.ConfigureInput(ScriptableRenderPassInput.Depth);
+                renderer.EnqueuePass(nativeUIPass);
             }
 
             resetPass.SetProfile(null, false);

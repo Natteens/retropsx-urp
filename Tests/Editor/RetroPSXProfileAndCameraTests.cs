@@ -1,5 +1,6 @@
 using System.Reflection;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 
 namespace RetroPSX.Tests
@@ -68,6 +69,19 @@ namespace RetroPSX.Tests
             Assert.That(policy.FullPipeline, Is.False);
         }
 
+        [TestCase(CameraType.Game, false, true)]
+        [TestCase(CameraType.SceneView, false, true)]
+        [TestCase(CameraType.Game, true, false)]
+        [TestCase(CameraType.Preview, false, false)]
+        [TestCase(CameraType.Reflection, false, false)]
+        public void NativeWorldSpaceUIUsesOnlySupportedBaseCameras(
+            CameraType cameraType,
+            bool overlay,
+            bool expected)
+        {
+            Assert.That(RetroCameraUtility.SupportsNativeWorldSpaceUI(cameraType, overlay), Is.EqualTo(expected));
+        }
+
         [Test]
         public void RasterProfileClampsInvalidAuthoringValues()
         {
@@ -105,6 +119,79 @@ namespace RetroPSX.Tests
         {
             RetroColorProfile profile = ScriptableObject.CreateInstance<RetroColorProfile>();
             Assert.That(profile.QuantizeFinalImage, Is.False);
+            Object.DestroyImmediate(profile);
+        }
+
+        [Test]
+        public void UIProfileDefaultsToNativeWithNoClaimedProjectLayer()
+        {
+            RetroUIProfile profile = ScriptableObject.CreateInstance<RetroUIProfile>();
+            Assert.That(profile.WorldSpaceDefault, Is.EqualTo(RetroUIRenderMode.Native));
+            Assert.That(profile.HasNativeWorldSpaceLayer, Is.False);
+            Assert.That(profile.NativeWorldSpaceLayer, Is.EqualTo(-1));
+            Object.DestroyImmediate(profile);
+        }
+
+        [Test]
+        public void UIMarkerDoesNotClaimALayerWithoutAConfiguredProfile()
+        {
+            GameObject panel = new("RetroPSX UI Marker Test");
+            panel.layer = 8;
+            RetroPSXUI marker = panel.AddComponent<RetroPSXUI>();
+            Assert.That(marker.Mode, Is.EqualTo(RetroUIRenderMode.Native));
+            Assert.That(panel.layer, Is.EqualTo(8));
+            Object.DestroyImmediate(panel);
+        }
+
+        [Test]
+        public void UIMarkerRestoresOriginalLayerWhenSwitchingModesOrDisabling()
+        {
+            RetroUIProfile profile = ScriptableObject.CreateInstance<RetroUIProfile>();
+            JsonUtility.FromJsonOverwrite("{\"nativeWorldSpaceLayer\":30}", profile);
+            GameObject panel = new("RetroPSX UI Layer Restore Test");
+            panel.layer = 8;
+            RetroPSXUI marker = panel.AddComponent<RetroPSXUI>();
+            SerializedObject serialized = new(marker);
+            serialized.FindProperty("uiProfile").objectReferenceValue = profile;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            marker.SetMode(RetroUIRenderMode.Native);
+            Assert.That(panel.layer, Is.EqualTo(30));
+            marker.SetMode(RetroUIRenderMode.Retro);
+            Assert.That(panel.layer, Is.EqualTo(8));
+            marker.SetMode(RetroUIRenderMode.Native);
+            marker.enabled = false;
+            Assert.That(panel.layer, Is.EqualTo(8));
+            marker.enabled = true;
+            Assert.That(panel.layer, Is.EqualTo(30));
+
+            JsonUtility.FromJsonOverwrite("{\"nativeWorldSpaceLayer\":29}", profile);
+            marker.SetMode(RetroUIRenderMode.Native);
+            Assert.That(panel.layer, Is.EqualTo(29));
+            marker.SetMode(RetroUIRenderMode.Retro);
+            Assert.That(panel.layer, Is.EqualTo(8));
+
+            Object.DestroyImmediate(panel);
+            Object.DestroyImmediate(profile);
+        }
+
+        [Test]
+        public void RemovingNativeUIMarkerRestoresOriginalLayerInEditMode()
+        {
+            RetroUIProfile profile = ScriptableObject.CreateInstance<RetroUIProfile>();
+            JsonUtility.FromJsonOverwrite("{\"nativeWorldSpaceLayer\":30}", profile);
+            GameObject panel = new("RetroPSX UI Remove Marker Test") { layer = 9 };
+            RetroPSXUI marker = panel.AddComponent<RetroPSXUI>();
+            SerializedObject serialized = new(marker);
+            serialized.FindProperty("uiProfile").objectReferenceValue = profile;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            marker.SetMode(RetroUIRenderMode.Native);
+            Assert.That(panel.layer, Is.EqualTo(30));
+
+            Object.DestroyImmediate(marker);
+            Assert.That(panel.layer, Is.EqualTo(9));
+
+            Object.DestroyImmediate(panel);
             Object.DestroyImmediate(profile);
         }
 

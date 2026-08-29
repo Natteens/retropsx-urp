@@ -35,6 +35,7 @@ namespace RetroPSX.Editor
             RetroVolumetricProfile volumetrics = GetOrCreate<RetroVolumetricProfile>($"{folder}/{prefix} Volumetrics.asset");
             RetroDisplayProfile display = GetOrCreate<RetroDisplayProfile>($"{folder}/{prefix} Display.asset");
             RetroDebugProfile debug = GetOrCreate<RetroDebugProfile>($"{folder}/{prefix} Debug.asset");
+            RetroUIProfile ui = GetOrCreate<RetroUIProfile>($"{folder}/{prefix} UI.asset");
 
             SerializedObject rootObject = new(root);
             rootObject.FindProperty("raster").objectReferenceValue = raster;
@@ -45,6 +46,7 @@ namespace RetroPSX.Editor
             rootObject.FindProperty("volumetrics").objectReferenceValue = volumetrics;
             rootObject.FindProperty("display").objectReferenceValue = display;
             rootObject.FindProperty("debug").objectReferenceValue = debug;
+            rootObject.FindProperty("ui").objectReferenceValue = ui;
             rootObject.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(root);
             return root;

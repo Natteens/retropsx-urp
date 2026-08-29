@@ -34,7 +34,7 @@ You can also embed the package or use a local package reference while developing
 
 1. Add `RetroPSXRendererFeature` to the Universal Renderer used by the camera.
 2. Choose **Assets > Create > RetroPSX > Complete Pipeline Profile** and assign the new root profile to the feature.
-3. Adjust the linked raster, geometry, color, lighting, fog, volumetric, display, and debug profiles.
+3. Adjust the linked raster, geometry, color, lighting, fog, volumetric, display, UI, and debug profiles.
 
 Normal URP materials continue to render normally. Low-resolution presentation, final-image color processing, volumetrics, display effects, and frame-resource debug views do not require a RetroPSX shader.
 
@@ -66,6 +66,15 @@ color = RetroPSX_ApplyFog(color, RetroPSX_GetFogFactor(positionWS), _FogStrength
 These functions also have `_float` entry points for Shader Graph Custom Function nodes in File mode. Shader Graph is not a package dependency.
 
 Material color processing and final-image color processing are separate. Final-image processing is off by default, so integrated materials are not quantized twice unless both paths are deliberately enabled.
+
+## UI Toolkit
+
+Screen-space UI Toolkit panels remain normal, native-resolution Unity UI. World-space panels can be marked with `RetroPSXUI`:
+
+- **Native** (the default) is drawn after RetroPSX presentation, so text and controls stay sharp and skip final RGB processing, dithering, and CRT. It still depth-tests against opaque world geometry.
+- **Retro** stays in the ordinary world render and is deliberately included in the RetroPSX raster and display treatment.
+
+For Native world-space UI, choose a free project layer in `RetroUIProfile`, exclude it from the Universal Renderer prepass, opaque, and transparent layer masks, and do not put ordinary scene renderers on that layer. The package leaves this unconfigured instead of claiming a user layer. `RetroPSXUI` temporarily applies the chosen layer in Native mode and restores the object's original layer in Retro mode or when disabled. The runtime marker does not depend on a specific UI Toolkit renderer type. The development path was validated with `PanelRenderer` on Unity 6000.5.7f1; earlier Unity 6 editor versions were not runtime-tested in this pass.
 
 ## Volumetrics
 
