@@ -1,6 +1,6 @@
 {
-    "name": "RetroPSXURP",
-    "rootNamespace": "RetroPSXURP",
+    "name": "RetroPSX.Runtime",
+    "rootNamespace": "RetroPSX",
     "references": [
         "Unity.RenderPipelines.Universal.Runtime",
         "Unity.RenderPipelines.Core.Runtime"

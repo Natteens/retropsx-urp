@@ -1,0 +1,147 @@
+using System.Reflection;
+using NUnit.Framework;
+using UnityEngine;
+
+namespace RetroPSX.Tests
+{
+    public sealed class RetroPSXProfileAndCameraTests
+    {
+        [Test]
+        public void IncompleteRootFailsGracefully()
+        {
+            RetroPSXPipelineProfile profile = ScriptableObject.CreateInstance<RetroPSXPipelineProfile>();
+            Assert.That(profile.IsComplete, Is.False);
+            Object.DestroyImmediate(profile);
+        }
+
+        [TestCase(CameraType.Game, true, RetroSceneViewMode.Off, false, true, true)]
+        [TestCase(CameraType.Game, false, RetroSceneViewMode.FullPipeline, false, false, false)]
+        [TestCase(CameraType.SceneView, true, RetroSceneViewMode.Off, false, false, false)]
+        [TestCase(CameraType.SceneView, false, RetroSceneViewMode.WorldEffects, false, true, false)]
+        [TestCase(CameraType.SceneView, false, RetroSceneViewMode.FullPipeline, false, true, true)]
+        [TestCase(CameraType.Preview, true, RetroSceneViewMode.FullPipeline, false, false, false)]
+        [TestCase(CameraType.Reflection, true, RetroSceneViewMode.FullPipeline, false, false, false)]
+        [TestCase(CameraType.Game, true, RetroSceneViewMode.FullPipeline, true, false, false)]
+        public void CameraPolicyIsExplicit(
+            CameraType type,
+            bool gameCameras,
+            RetroSceneViewMode sceneView,
+            bool overlay,
+            bool expectedWorldEffects,
+            bool expectedFullPipeline)
+        {
+            RetroCameraPolicy policy = RetroCameraUtility.ResolvePolicy(type, gameCameras, sceneView, overlay);
+            Assert.That(policy.WorldEffects, Is.EqualTo(expectedWorldEffects));
+            Assert.That(policy.FullPipeline, Is.EqualTo(expectedFullPipeline));
+        }
+
+        [Test]
+        public void SceneViewWorldEffectsUsesNativeCameraDimensions()
+        {
+            RetroRasterProfile profile = ScriptableObject.CreateInstance<RetroRasterProfile>();
+            RetroRasterContext context = RetroCameraUtility.BuildRasterContext(profile, 1000, 700, false);
+            Assert.That(context.SourceSize, Is.EqualTo(new Vector2Int(1000, 700)));
+            Assert.That(context.InternalSize, Is.EqualTo(new Vector2Int(1000, 700)));
+            Assert.That(context.Viewport, Is.EqualTo(new RectInt(0, 0, 1000, 700)));
+            Assert.That(context.IsNative, Is.True);
+            Object.DestroyImmediate(profile);
+        }
+
+        [Test]
+        public void FullPipelineUsesEachCamerasOwnDimensions()
+        {
+            RetroRasterProfile profile = ScriptableObject.CreateInstance<RetroRasterProfile>();
+            RetroRasterContext game = RetroCameraUtility.BuildRasterContext(profile, 1920, 1080, true);
+            RetroRasterContext scene = RetroCameraUtility.BuildRasterContext(profile, 1000, 700, true);
+            Assert.That(game.InternalSize, Is.EqualTo(new Vector2Int(427, 240)));
+            Assert.That(scene.InternalSize, Is.EqualTo(new Vector2Int(343, 240)));
+            Assert.That(scene.SourceSize, Is.EqualTo(new Vector2Int(1000, 700)));
+            Object.DestroyImmediate(profile);
+        }
+
+        [Test]
+        public void SceneViewOffDoesNotRequestPresentation()
+        {
+            RetroCameraPolicy policy = RetroCameraUtility.ResolvePolicy(
+                CameraType.SceneView, true, RetroSceneViewMode.Off, false);
+            Assert.That(policy.WorldEffects, Is.False);
+            Assert.That(policy.FullPipeline, Is.False);
+        }
+
+        [Test]
+        public void RasterProfileClampsInvalidAuthoringValues()
+        {
+            RetroRasterProfile profile = ScriptableObject.CreateInstance<RetroRasterProfile>();
+            JsonUtility.FromJsonOverwrite("{\"customResolution\":{\"x\":-10,\"y\":0},\"internalHeight\":-1,\"scaleFactor\":3}", profile);
+            typeof(RetroRasterProfile).GetMethod("OnValidate", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(profile, null);
+            Assert.That(profile.CustomResolution.x, Is.GreaterThanOrEqualTo(64));
+            Assert.That(profile.CustomResolution.y, Is.GreaterThanOrEqualTo(64));
+            Assert.That(profile.InternalHeight, Is.GreaterThanOrEqualTo(64));
+            Assert.That(profile.ScaleFactor, Is.InRange(0.1f, 1f));
+            Object.DestroyImmediate(profile);
+        }
+
+        [Test]
+        public void RasterDefaultsFillTheCameraViewport()
+        {
+            RetroRasterProfile profile = ScriptableObject.CreateInstance<RetroRasterProfile>();
+            RetroRasterContext context = profile.BuildContext(3440, 1440);
+            Assert.That(profile.Presentation, Is.EqualTo(RetroPresentationMode.Stretch));
+            Assert.That(context.InternalSize, Is.EqualTo(new Vector2Int(573, 240)));
+            Assert.That(context.Viewport, Is.EqualTo(new RectInt(0, 0, 3440, 1440)));
+            Object.DestroyImmediate(profile);
+        }
+
+        [Test]
+        public void FogModesUseAlgorithmNames()
+        {
+            CollectionAssert.AreEqual(
+                new[] { "Off", "DistanceColor", "DistanceModulation", "SteppedDistanceColor" },
+                System.Enum.GetNames(typeof(RetroFogMode)));
+        }
+
+        [Test]
+        public void FinalImageQuantizationIsAnExplicitOptIn()
+        {
+            RetroColorProfile profile = ScriptableObject.CreateInstance<RetroColorProfile>();
+            Assert.That(profile.QuantizeFinalImage, Is.False);
+            Object.DestroyImmediate(profile);
+        }
+
+        [Test]
+        public void VisibleVolumetricSelectionRejectsDisabledLights()
+        {
+            GameObject cameraObject = new("RetroPSX Test Camera");
+            Camera camera = cameraObject.AddComponent<Camera>();
+            GameObject lightObject = new("RetroPSX Test Light");
+            lightObject.transform.position = new Vector3(0f, 0f, 3f);
+            Light light = lightObject.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.range = 5f;
+            RetroVolumetricLight volume = lightObject.AddComponent<RetroVolumetricLight>();
+            RetroVolumetricLight[] results = new RetroVolumetricLight[4];
+            Assert.That(RetroVolumetricLightRegistry.CopyVisible(camera, results, 4), Is.EqualTo(1));
+            light.enabled = false;
+            Assert.That(RetroVolumetricLightRegistry.CopyVisible(camera, results, 4), Is.EqualTo(0));
+            Object.DestroyImmediate(lightObject);
+            Object.DestroyImmediate(cameraObject);
+        }
+
+        [Test]
+        public void LocalVolumetricLightsDefaultToUnityLightShadows()
+        {
+            GameObject lightObject = new("RetroPSX Shadow Policy Test");
+            Light light = lightObject.AddComponent<Light>();
+            light.type = LightType.Point;
+            RetroVolumetricLight volume = lightObject.AddComponent<RetroVolumetricLight>();
+
+            Assert.That(volume.VolumetricShadows, Is.EqualTo(RetroVolumetricShadowMode.UseLightShadows));
+            Assert.That(volume.UsesLightShadows, Is.True);
+            Assert.That(volume.RequiresRealtimeShadows, Is.True);
+
+            light.shadows = LightShadows.Hard;
+            Assert.That(volume.RequiresRealtimeShadows, Is.False);
+            Object.DestroyImmediate(lightObject);
+        }
+    }
+}

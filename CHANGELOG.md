@@ -1,45 +1,30 @@
-## [0.1.1](https://github.com/Natteens/retropsx-urp/compare/v0.1.0...v0.1.1) (2026-08-04)
+# Changelog
 
+Notable changes to RetroPSX-URP are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-### Bug Fixes
+## [Unreleased]
 
-* correct package identifier and requirements ([5fa992a](https://github.com/Natteens/retropsx-urp/commit/5fa992a2d76382524c194544a4f71a6db8bd021d))
-* declare URP dependency ([4c51d5a](https://github.com/Natteens/retropsx-urp/commit/4c51d5a0a84933d2d6b4090ba492e78d0b07dc09))
-* preserve UPM dependencies during release [skip ci] ([98230ee](https://github.com/Natteens/retropsx-urp/commit/98230ee6321608b39442311fe807d1ddd6d459f3))
+### Changed
 
-# 📝 Changelog
+- Rebuilt the package as a coordinated, RenderGraph-first rendering pipeline.
+- Replaced the legacy independent CRT, dithering, fog, pixelation, controller, Shader Graph, and subgraph implementations.
 
-Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+### Added
 
-O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
-e este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+- Independent raster, geometry, color, lighting, fog, volumetric, display, debug, texture, and pattern profile types.
+- Explicit Lit and Unlit PSX material shaders with integer viewport snapping, affine interpolation, vertex lighting, texture modulation, RGB quantization, ordered dithering, fog, and semi-transparency modes.
+- Native and aspect-aware low-resolution resolve, point presentation, reduced-resolution raymarched volumetrics, modular CRT simulation, texture import tooling, debug views, and edit-mode tests.
 
-## [Não Lançado]
+## [0.1.1](https://github.com/Natteens/retropsx-urp/compare/v0.1.0...v0.1.1) - 2026-08-04
+
+### Fixed
+
+- Corrected the package identifier and requirements.
+- Declared the URP dependency.
+- Preserved UPM dependencies during automated releases.
 
 ## [0.1.0] - 2025-12-06
 
-### Adicionado
-- ✨ Estrutura inicial do pacote Unity
-- 📦 Configuração do Package Manager
-- 📚 Documentação básica
-- 🧪 Estrutura de testes
-- 📋 Exemplos e amostras
+### Added
 
-### Mudado
-- Nada ainda
-
-### Removido
-- Nada ainda
-
-### Corrigido
-- Nada ainda
-
----
-
-Os tipos de mudanças são:
-- **Adicionado** para novas funcionalidades
-- **Mudado** para mudanças em funcionalidades existentes
-- **Depreciado** para funcionalidades que serão removidas em breve
-- **Removido** para funcionalidades removidas
-- **Corrigido** para correções de bugs
-- **Segurança** para vulnerabilidades
+- Initial package structure, documentation, tests, and samples.

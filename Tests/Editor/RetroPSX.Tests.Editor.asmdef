@@ -1,0 +1,15 @@
+{
+  "name": "RetroPSX.Tests.Editor",
+  "rootNamespace": "RetroPSX.Tests",
+  "references": ["RetroPSX.Runtime"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": ["TestAssemblies"]
+}

@@ -2,7 +2,7 @@
   "name": "com.natteens.retropsxurp",
   "version": "0.1.1",
   "displayName": "RetroPSX-URP",
-  "description": "PSX retro graphics package for URP with Shadergraph in Unity",
+  "description": "A modular, RenderGraph-first PSX-style rendering toolkit for Unity 6 URP.",
   "keywords": [
     "Unity",
     "GameDev",
