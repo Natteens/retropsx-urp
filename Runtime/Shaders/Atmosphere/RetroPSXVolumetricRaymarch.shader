@@ -17,8 +17,8 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "../Includes/RetroPSXCore.hlsl"
+            #include "../Includes/RetroPSXShadows.hlsl"
 
             float4 _RetroVolumeParams0;
             float4 _RetroVolumeParams1;
@@ -50,16 +50,25 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
 
             float PhaseHG(float cosine, float g)
             {
+                g = clamp(g, -0.8, 0.8);
+                cosine = clamp(cosine, -1.0, 1.0);
                 float g2 = g * g;
-                return (1.0 - g2) / max(12.56637 * pow(1.0 + g2 - 2.0 * g * cosine, 1.5), 1e-4);
+                float phaseBase = max(1.0 + g2 - 2.0 * g * cosine, 1e-4);
+                return (1.0 - g2) / max(12.56637 * pow(phaseBase, 1.5), 1e-4);
             }
 
             float SamplePatternTexture(int index, float2 uv)
             {
-                if (index == 0) return SAMPLE_TEXTURE2D(_RetroPattern0, sampler_RetroPattern0, uv).r;
-                if (index == 1) return SAMPLE_TEXTURE2D(_RetroPattern1, sampler_RetroPattern1, uv).r;
-                if (index == 2) return SAMPLE_TEXTURE2D(_RetroPattern2, sampler_RetroPattern2, uv).r;
-                return SAMPLE_TEXTURE2D(_RetroPattern3, sampler_RetroPattern3, uv).r;
+                float value = 1.0;
+                if (index == 0)
+                    value = SAMPLE_TEXTURE2D_LOD(_RetroPattern0, sampler_RetroPattern0, uv, 0.0).r;
+                else if (index == 1)
+                    value = SAMPLE_TEXTURE2D_LOD(_RetroPattern1, sampler_RetroPattern1, uv, 0.0).r;
+                else if (index == 2)
+                    value = SAMPLE_TEXTURE2D_LOD(_RetroPattern2, sampler_RetroPattern2, uv, 0.0).r;
+                else if (index == 3)
+                    value = SAMPLE_TEXTURE2D_LOD(_RetroPattern3, sampler_RetroPattern3, uv, 0.0).r;
+                return value;
             }
 
             float Pattern(int index, float3 positionWS, float3 relative, float range, float3 direction)
@@ -97,7 +106,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                 else if (type == 5) value = SamplePatternTexture(index, uv);
 
                 float4 parameters = _RetroLocalPatternParams[index];
-                value = pow(saturate(value), parameters.y);
+                value = pow(saturate(value), max(parameters.y, 0.01));
                 value = smoothstep(parameters.z - parameters.w, parameters.z + parameters.w, value);
                 if (_RetroLocalPatternExtra[index].x > 0.5) value = 1.0 - value;
                 float blinkRate = _RetroLocalPatternExtra[index].z;
@@ -136,7 +145,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                     float3 incoming = _RetroVolumeAmbient.rgb;
                     if (_RetroVolumeParams1.w > 1e-4)
                     {
-                        float mainShadow = MainLightRealtimeShadow(TransformWorldToShadowCoord(positionWS));
+                        float mainShadow = SampleRetroPSXMainLightShadow(positionWS);
                         incoming += _RetroPSXMainLightColor.rgb * phase * _RetroVolumeParams1.w * mainShadow;
                     }
 
@@ -175,18 +184,18 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                             // volumetric term: it causes a light to shine through geometry
                             // whenever the current camera did not receive its atlas entry.
                             // Volumetric Shadows = Use Light Shadows therefore fails closed.
-                            half4 shadowParams = half4(0.0, 0.0, 0.0, -1.0);
+                            shadowVisibility = 0.0;
                             if (shadowIndex >= 0)
-                                shadowParams = GetAdditionalLightShadowParams(shadowIndex);
-                            if (shadowParams.w >= 0.0)
-                                shadowVisibility = AdditionalLightRealtimeShadow(
-                                    shadowIndex,
-                                    positionWS,
-                                    normalize(-relative),
-                                    shadowParams,
-                                    GetAdditionalLightShadowSamplingData(shadowIndex));
-                            else
-                                shadowVisibility = 0.0;
+                            {
+                                half4 shadowParams = GetRetroPSXAdditionalLightShadowParams(shadowIndex);
+                                if (shadowParams.w >= 0.0)
+                                {
+                                    shadowVisibility = SampleRetroPSXAdditionalLightShadow(
+                                        positionWS,
+                                        normalize(-relative),
+                                        shadowParams);
+                                }
+                            }
                         }
                         if (_RetroPSXDebugMode == 10 && lightIndex == (int)round(_RetroVolumeParams3.z))
                         {
