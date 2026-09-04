@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/Natteens/retropsx-urp/compare/v1.1.0...v1.1.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* transparency ([0fd7c55](https://github.com/Natteens/retropsx-urp/commit/0fd7c5558cf0f0ae366f091ccc9cdb76db8e3994))
+
 # [1.1.0](https://github.com/Natteens/retropsx-urp/compare/v1.0.0...v1.1.0) (2026-08-29)
 
 
