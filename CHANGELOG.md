@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/Natteens/retropsx-urp/compare/v1.1.2...v1.1.3) (2026-09-04)
+
+
+### Bug Fixes
+
+* Harden volumetric shadow sampling path ([deca9d0](https://github.com/Natteens/retropsx-urp/commit/deca9d002b2c335be3f82cea6bfccdf394f8322b))
+
 ## [1.1.2](https://github.com/Natteens/retropsx-urp/compare/v1.1.1...v1.1.2) (2026-09-04)
 
 
