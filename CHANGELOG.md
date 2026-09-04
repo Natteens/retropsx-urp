@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/Natteens/retropsx-urp/compare/v1.1.1...v1.1.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* stabilize player rendering and offscreen cameras ([384de2d](https://github.com/Natteens/retropsx-urp/commit/384de2d186e801e351690b41d1162931f7b53131))
+
 ## [1.1.1](https://github.com/Natteens/retropsx-urp/compare/v1.1.0...v1.1.1) (2026-09-04)
 
 
