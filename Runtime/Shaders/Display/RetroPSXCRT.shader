@@ -21,6 +21,7 @@ Shader "Hidden/RetroPSX/CRT"
             float4 _RetroCRTParams1;
             float4 _RetroCRTParams2;
             float _RetroPixelBloom;
+            float _RetroPreserveAlpha;
 
             float Hash12(float2 p)
             {
@@ -40,7 +41,7 @@ Shader "Hidden/RetroPSX/CRT"
                 uv = (uv - 0.5) * (1.0 + _RetroCRTParams1.x) + 0.5;
 
                 if (any(uv < 0.0) || any(uv > 1.0))
-                    return 0;
+                    return half4(0.0, 0.0, 0.0, _RetroPreserveAlpha > 0.5 ? 0.0 : 1.0);
 
                 float2 texel = _BlitTexture_TexelSize.xy;
                 float chroma = _RetroCRTParams2.x * texel.x;
@@ -91,7 +92,7 @@ Shader "Hidden/RetroPSX/CRT"
                 color += max(color - 0.7, 0.0) * _RetroPixelBloom;
                 color *= _RetroCRTParams2.z;
 
-                return half4(max(color, 0.0), centerSample.a);
+                return half4(max(color, 0.0), _RetroPreserveAlpha > 0.5 ? centerSample.a : 1.0);
             }
 
             ENDHLSL

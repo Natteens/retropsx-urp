@@ -36,6 +36,30 @@ namespace RetroPSX.Tests
             Assert.That(policy.FullPipeline, Is.EqualTo(expectedFullPipeline));
         }
 
+        [TestCase(CameraType.Game, RetroSceneViewMode.FullPipeline, false, false, false, true, true, false)]
+        [TestCase(CameraType.Game, RetroSceneViewMode.FullPipeline, false, true, true, true, false, true)]
+        [TestCase(CameraType.SceneView, RetroSceneViewMode.FullPipeline, false, true, true, true, true, true)]
+        [TestCase(CameraType.SceneView, RetroSceneViewMode.WorldEffects, false, true, true, true, false, true)]
+        [TestCase(CameraType.SceneView, RetroSceneViewMode.Off, false, true, true, false, false, false)]
+        [TestCase(CameraType.Game, RetroSceneViewMode.FullPipeline, true, false, true, false, false, false)]
+        [TestCase(CameraType.Preview, RetroSceneViewMode.FullPipeline, false, true, true, false, false, false)]
+        public void CameraTargetAndAlphaPolicyIsExplicit(
+            CameraType type,
+            RetroSceneViewMode sceneView,
+            bool overlay,
+            bool hasTargetTexture,
+            bool alphaOutputEnabled,
+            bool expectedWorldEffects,
+            bool expectedFullPipeline,
+            bool expectedPreserveAlpha)
+        {
+            RetroCameraPolicy policy = RetroCameraUtility.ResolvePolicy(
+                type, true, sceneView, overlay, hasTargetTexture, alphaOutputEnabled);
+            Assert.That(policy.WorldEffects, Is.EqualTo(expectedWorldEffects));
+            Assert.That(policy.FullPipeline, Is.EqualTo(expectedFullPipeline));
+            Assert.That(policy.PreserveAlpha, Is.EqualTo(expectedPreserveAlpha));
+        }
+
         [Test]
         public void SceneViewWorldEffectsUsesNativeCameraDimensions()
         {

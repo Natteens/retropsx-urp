@@ -7,26 +7,27 @@
 float RetroPSX_DitherValue(int mode, int2 pixel)
 {
     pixel = int2(pixel.x & 3, pixel.y & 3);
+    float value = 0.0;
     if (mode == 1)
     {
         static const int psx[16] = { -4, 0, -3, 1, 2, -2, 3, -1, -3, 1, -4, 0, 3, -1, 2, -2 };
-        return psx[pixel.y * 4 + pixel.x] / 255.0;
+        value = psx[pixel.y * 4 + pixel.x] / 255.0;
     }
-    if (mode == 2)
+    else if (mode == 2)
     {
         static const float bayer2[4] = { -0.375, 0.125, 0.375, -0.125 };
-        return bayer2[(pixel.y & 1) * 2 + (pixel.x & 1)] / 31.0;
+        value = bayer2[(pixel.y & 1) * 2 + (pixel.x & 1)] / 31.0;
     }
-    if (mode == 3)
+    else if (mode == 3)
     {
         static const float bayer4[16] = {
             -0.46875, 0.03125, -0.34375, 0.15625,
              0.28125,-0.21875,  0.40625,-0.09375,
             -0.28125, 0.21875, -0.40625, 0.09375,
              0.46875,-0.03125,  0.34375,-0.15625 };
-        return bayer4[pixel.y * 4 + pixel.x] / 31.0;
+        value = bayer4[pixel.y * 4 + pixel.x] / 31.0;
     }
-    return 0.0;
+    return value;
 }
 
 half3 RetroPSX_ApplyColorPrecision(half3 linearColor, int ditherMode, float ditherStrength, int2 pixel)

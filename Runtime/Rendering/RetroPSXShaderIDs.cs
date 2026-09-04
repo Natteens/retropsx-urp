@@ -25,6 +25,7 @@ namespace RetroPSX.Rendering
         internal static readonly int BlueNoise = Shader.PropertyToID("_RetroBlueNoise");
         internal static readonly int PresentationRect = Shader.PropertyToID("_RetroPresentationRect");
         internal static readonly int LetterboxColor = Shader.PropertyToID("_RetroLetterboxColor");
+        internal static readonly int PreserveAlpha = Shader.PropertyToID("_RetroPreserveAlpha");
         internal static readonly int VolumeTexture = Shader.PropertyToID("_RetroVolumeTexture");
         internal static readonly int VolumeTexelSize = Shader.PropertyToID("_RetroVolumeTexelSize");
         internal static readonly int VolumeParams0 = Shader.PropertyToID("_RetroVolumeParams0");

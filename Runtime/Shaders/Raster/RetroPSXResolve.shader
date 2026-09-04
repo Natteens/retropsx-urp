@@ -21,17 +21,22 @@ Shader "Hidden/RetroPSX/Resolve"
             TEXTURE2D(_RetroBlueNoise);
             SAMPLER(sampler_RetroBlueNoise);
             float4 _RetroFinalColorParams;
+            float _RetroPreserveAlpha;
 
             float ResolveDither(int mode, int2 pixel)
             {
+                float value = 0.0;
                 if (mode <= 3)
-                    return RetroPSXDitherValue(mode, pixel);
-                float2 uv = (pixel + 0.5) * _RetroPSXInternalSize.zw;
-                if (mode == 4)
-                    return (SAMPLE_TEXTURE2D(_RetroCustomDither, sampler_RetroCustomDither, uv).r - 0.5) / 31.0;
-                if (mode == 5)
-                    return (SAMPLE_TEXTURE2D(_RetroBlueNoise, sampler_RetroBlueNoise, uv * 0.5).r - 0.5) / 31.0;
-                return 0.0;
+                    value = RetroPSXDitherValue(mode, pixel);
+                else
+                {
+                    float2 uv = (pixel + 0.5) * _RetroPSXInternalSize.zw;
+                    if (mode == 4)
+                        value = (SAMPLE_TEXTURE2D(_RetroCustomDither, sampler_RetroCustomDither, uv).r - 0.5) / 31.0;
+                    else if (mode == 5)
+                        value = (SAMPLE_TEXTURE2D(_RetroBlueNoise, sampler_RetroBlueNoise, uv * 0.5).r - 0.5) / 31.0;
+                }
+                return value;
             }
 
             half4 Frag(Varyings input) : SV_Target
@@ -83,7 +88,7 @@ Shader "Hidden/RetroPSX/Resolve"
                     float3 positionWS = ComputeWorldSpacePosition(uv, rawDepth, UNITY_MATRIX_I_VP);
                     color = frac(abs(positionWS) * 0.1);
                 }
-                return half4(color, original.a);
+                return half4(color, _RetroPreserveAlpha > 0.5 ? original.a : 1.0);
             }
             ENDHLSL
         }

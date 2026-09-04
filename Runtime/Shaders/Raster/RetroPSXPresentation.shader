@@ -16,6 +16,7 @@ Shader "Hidden/RetroPSX/Presentation"
 
             float4 _RetroPresentationRect;
             half4 _RetroLetterboxColor;
+            float _RetroPreserveAlpha;
 
             half4 Frag(Varyings input) : SV_Target
             {
@@ -23,9 +24,10 @@ Shader "Hidden/RetroPSX/Presentation"
                 float2 minimum = _RetroPresentationRect.xy;
                 float2 maximum = minimum + _RetroPresentationRect.zw;
                 if (any(uv < minimum) || any(uv > maximum))
-                    return _RetroLetterboxColor;
+                    return half4(_RetroLetterboxColor.rgb, _RetroPreserveAlpha > 0.5 ? _RetroLetterboxColor.a : 1.0);
                 float2 imageUV = saturate((uv - minimum) / max(_RetroPresentationRect.zw, 1e-5));
-                return SAMPLE_TEXTURE2D(_BlitTexture, sampler_PointClamp, imageUV);
+                half4 color = SAMPLE_TEXTURE2D(_BlitTexture, sampler_PointClamp, imageUV);
+                return half4(color.rgb, _RetroPreserveAlpha > 0.5 ? color.a : 1.0);
             }
             ENDHLSL
         }

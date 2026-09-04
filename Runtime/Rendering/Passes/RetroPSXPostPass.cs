@@ -26,6 +26,7 @@ namespace RetroPSX.Rendering
 
         private RetroPSXPipelineProfile profile;
         private bool fullPipeline;
+        private bool preserveAlpha;
 
         internal RetroPSXPostPass(Material resolve, Material presentation, Material volumetric, Material volumetricComposite, Material crt)
         {
@@ -38,10 +39,11 @@ namespace RetroPSX.Rendering
         }
 
         internal bool HasRequiredMaterials => resolveMaterial != null && presentationMaterial != null;
-        internal void SetProfile(RetroPSXPipelineProfile value, bool useFullPipeline)
+        internal void SetProfile(RetroPSXPipelineProfile value, bool useFullPipeline, bool preserveOutputAlpha)
         {
             profile = value;
             fullPipeline = useFullPipeline;
+            preserveAlpha = preserveOutputAlpha;
         }
 
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
@@ -76,19 +78,19 @@ namespace RetroPSX.Rendering
             {
                 if (useVolumetrics)
                     resources.cameraColor = AddVolumetrics(renderGraph, cameraData, lightData, raster, lowDesc, source, depth,
-                        resources.mainShadowsTexture, resources.additionalShadowsTexture, false);
+                        resources.mainShadowsTexture, resources.additionalShadowsTexture, false, preserveAlpha);
                 return;
             }
 
             TextureHandle canonical = renderGraph.CreateTexture(lowDesc);
-            ConfigureResolveMaterial(raster, !useVolumetrics);
+            ConfigureResolveMaterial(raster, !useVolumetrics, preserveAlpha);
             AddBlit(renderGraph, "RetroPSX / Canonical Resolve", source, canonical, resolveMaterial, 0, depth,
                 TextureHandle.nullHandle, TextureHandle.nullHandle, false);
 
             TextureHandle lowFinal = canonical;
             if (useVolumetrics)
                 lowFinal = AddVolumetrics(renderGraph, cameraData, lightData, raster, lowDesc, canonical, depth,
-                    resources.mainShadowsTexture, resources.additionalShadowsTexture, true);
+                    resources.mainShadowsTexture, resources.additionalShadowsTexture, true, preserveAlpha);
 
             TextureDesc outputDesc = sourceDesc;
             outputDesc.name = "RetroPSX.PresentedColor";
@@ -102,7 +104,7 @@ namespace RetroPSX.Rendering
             if (!raster.IsNative || raster.PresentationMode != RetroPresentationMode.Stretch)
             {
                 presented = renderGraph.CreateTexture(outputDesc);
-                ConfigurePresentationMaterial(raster);
+                ConfigurePresentationMaterial(raster, preserveAlpha);
                 AddBlit(renderGraph, "RetroPSX / Point Presentation", lowFinal, presented, presentationMaterial, 0,
                     TextureHandle.nullHandle, TextureHandle.nullHandle, TextureHandle.nullHandle, false);
             }
@@ -113,7 +115,7 @@ namespace RetroPSX.Rendering
                 TextureDesc crtDesc = outputDesc;
                 crtDesc.name = "RetroPSX.DisplayColor";
                 final = renderGraph.CreateTexture(crtDesc);
-                ConfigureCRTMaterial();
+                ConfigureCRTMaterial(preserveAlpha);
                 AddBlit(renderGraph, "RetroPSX / Display Simulation", presented, final, crtMaterial, 0,
                     TextureHandle.nullHandle, TextureHandle.nullHandle, TextureHandle.nullHandle, false);
             }
@@ -121,7 +123,7 @@ namespace RetroPSX.Rendering
             resources.cameraColor = final;
         }
 
-        private void ConfigureResolveMaterial(RetroRasterContext raster, bool applyFinalColor)
+        private void ConfigureResolveMaterial(RetroRasterContext raster, bool applyFinalColor, bool preserveOutputAlpha)
         {
             RetroColorProfile color = profile.Color;
             Vector3Int bits = color.Bits;
@@ -134,6 +136,7 @@ namespace RetroPSX.Rendering
                 profile.Fog.Enabled && profile.Fog.ApplyToWholeFrame ? 1f : 0f));
             resolveMaterial.SetTexture(RetroPSXShaderIDs.CustomDither, color.CustomPattern != null ? color.CustomPattern : Texture2D.grayTexture);
             resolveMaterial.SetTexture(RetroPSXShaderIDs.BlueNoise, color.BlueNoise != null ? color.BlueNoise : Texture2D.grayTexture);
+            resolveMaterial.SetFloat(RetroPSXShaderIDs.PreserveAlpha, preserveOutputAlpha ? 1f : 0f);
         }
 
         private TextureHandle AddVolumetrics(
@@ -146,7 +149,8 @@ namespace RetroPSX.Rendering
             TextureHandle depth,
             TextureHandle mainShadows,
             TextureHandle additionalShadows,
-            bool applyFinalColor)
+            bool applyFinalColor,
+            bool preserveOutputAlpha)
         {
             profile.Volumetrics.GetQuality(out int divisor, out int steps);
             TextureDesc volumeDesc = lowDesc;
@@ -178,6 +182,7 @@ namespace RetroPSX.Rendering
                 0f));
             volumetricCompositeMaterial.SetTexture(RetroPSXShaderIDs.CustomDither, color.CustomPattern != null ? color.CustomPattern : Texture2D.grayTexture);
             volumetricCompositeMaterial.SetTexture(RetroPSXShaderIDs.BlueNoise, color.BlueNoise != null ? color.BlueNoise : Texture2D.grayTexture);
+            volumetricCompositeMaterial.SetFloat(RetroPSXShaderIDs.PreserveAlpha, preserveOutputAlpha ? 1f : 0f);
             AddBlit(renderGraph, "RetroPSX / Volumetric Composite", canonical, composite, volumetricCompositeMaterial, 0, volume,
                 depth, TextureHandle.nullHandle, false);
             return composite;
@@ -293,7 +298,7 @@ namespace RetroPSX.Rendering
             volumetricMaterial.SetTexture(id, texture);
         }
 
-        private void ConfigurePresentationMaterial(RetroRasterContext raster)
+        private void ConfigurePresentationMaterial(RetroRasterContext raster, bool preserveOutputAlpha)
         {
             RectInt rect = raster.Viewport;
             presentationMaterial.SetVector(RetroPSXShaderIDs.PresentationRect, new Vector4(
@@ -302,15 +307,17 @@ namespace RetroPSX.Rendering
                 rect.width / (float)raster.SourceSize.x,
                 rect.height / (float)raster.SourceSize.y));
             presentationMaterial.SetColor(RetroPSXShaderIDs.LetterboxColor, profile.Raster.LetterboxColor.linear);
+            presentationMaterial.SetFloat(RetroPSXShaderIDs.PreserveAlpha, preserveOutputAlpha ? 1f : 0f);
         }
 
-        private void ConfigureCRTMaterial()
+        private void ConfigureCRTMaterial(bool preserveOutputAlpha)
         {
             RetroDisplayProfile display = profile.Display;
             crtMaterial.SetVector(RetroPSXShaderIDs.CRTParams0, new Vector4(display.Scanlines, display.MaskStrength, (float)display.MaskMode, display.Curvature));
             crtMaterial.SetVector(RetroPSXShaderIDs.CRTParams1, new Vector4(display.Overscan, display.Vignette, display.HorizontalBleed, display.ChromaBleed));
             crtMaterial.SetVector(RetroPSXShaderIDs.CRTParams2, new Vector4(display.ChromaticMisalignment, display.SignalNoise, display.Brightness, display.Interlacing ? 1f : 0f));
             crtMaterial.SetFloat(RetroPSXShaderIDs.PixelBloom, display.PixelBloom);
+            crtMaterial.SetFloat(RetroPSXShaderIDs.PreserveAlpha, preserveOutputAlpha ? 1f : 0f);
         }
 
         private static void AddBlit(

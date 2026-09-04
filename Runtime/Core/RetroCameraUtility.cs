@@ -5,13 +5,20 @@ namespace RetroPSX
     public readonly struct RetroCameraPolicy
     {
         public RetroCameraPolicy(bool worldEffects, bool fullPipeline)
+            : this(worldEffects, fullPipeline, false)
+        {
+        }
+
+        public RetroCameraPolicy(bool worldEffects, bool fullPipeline, bool preserveAlpha)
         {
             WorldEffects = worldEffects;
             FullPipeline = fullPipeline;
+            PreserveAlpha = preserveAlpha;
         }
 
         public bool WorldEffects { get; }
         public bool FullPipeline { get; }
+        public bool PreserveAlpha { get; }
     }
 
     public static class RetroCameraUtility
@@ -22,13 +29,24 @@ namespace RetroPSX
             RetroSceneViewMode sceneViewMode,
             bool isOverlay)
         {
+            return ResolvePolicy(cameraType, gameCamerasEnabled, sceneViewMode, isOverlay, false, false);
+        }
+
+        public static RetroCameraPolicy ResolvePolicy(
+            CameraType cameraType,
+            bool gameCamerasEnabled,
+            RetroSceneViewMode sceneViewMode,
+            bool isOverlay,
+            bool hasTargetTexture,
+            bool isAlphaOutputEnabled)
+        {
             if (isOverlay)
                 return default;
 
             if (cameraType == CameraType.Game && gameCamerasEnabled)
-                return new RetroCameraPolicy(true, true);
+                return new RetroCameraPolicy(true, !hasTargetTexture, isAlphaOutputEnabled);
             if (cameraType == CameraType.SceneView && sceneViewMode != RetroSceneViewMode.Off)
-                return new RetroCameraPolicy(true, sceneViewMode == RetroSceneViewMode.FullPipeline);
+                return new RetroCameraPolicy(true, sceneViewMode == RetroSceneViewMode.FullPipeline, isAlphaOutputEnabled);
             return default;
         }
 

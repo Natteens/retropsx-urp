@@ -24,18 +24,23 @@ Shader "Hidden/RetroPSX/VolumetricComposite"
             float4 _RetroVolumeTexelSize;
             float4 _RetroVolumeParams3;
             float4 _RetroFinalColorParams;
+            float _RetroPreserveAlpha;
             #include "../Includes/RetroPSXCommon.hlsl"
 
             float FinalDither(int mode, int2 pixel)
             {
+                float value = 0.0;
                 if (mode <= 3)
-                    return RetroPSX_DitherValue(mode, pixel);
-                float2 patternUV = (pixel + 0.5) * _RetroPSXInternalSize.zw;
-                if (mode == 4)
-                    return (SAMPLE_TEXTURE2D(_RetroCustomDither, sampler_RetroCustomDither, patternUV).r - 0.5) / 31.0;
-                if (mode == 5)
-                    return (SAMPLE_TEXTURE2D(_RetroBlueNoise, sampler_RetroBlueNoise, patternUV * 0.5).r - 0.5) / 31.0;
-                return 0.0;
+                    value = RetroPSX_DitherValue(mode, pixel);
+                else
+                {
+                    float2 patternUV = (pixel + 0.5) * _RetroPSXInternalSize.zw;
+                    if (mode == 4)
+                        value = (SAMPLE_TEXTURE2D(_RetroCustomDither, sampler_RetroCustomDither, patternUV).r - 0.5) / 31.0;
+                    else if (mode == 5)
+                        value = (SAMPLE_TEXTURE2D(_RetroBlueNoise, sampler_RetroBlueNoise, patternUV * 0.5).r - 0.5) / 31.0;
+                }
+                return value;
             }
 
             float EyeDepth(float2 uv)
@@ -82,11 +87,11 @@ Shader "Hidden/RetroPSX/VolumetricComposite"
                 }
                 volume /= max(weightSum, 1e-4);
                 if (_RetroPSXDebugMode == 7)
-                    return half4(volume.rgb, 1.0);
+                    return half4(volume.rgb, _RetroPreserveAlpha > 0.5 ? baseColor.a : 1.0);
                 if (_RetroPSXDebugMode == 10)
-                    return half4(volume.rgb, 1.0);
+                    return half4(volume.rgb, _RetroPreserveAlpha > 0.5 ? baseColor.a : 1.0);
                 if (_RetroPSXDebugMode == 6)
-                    return half4((1.0 - volume.a).xxx, 1.0);
+                    return half4((1.0 - volume.a).xxx, _RetroPreserveAlpha > 0.5 ? baseColor.a : 1.0);
                 half3 composite = baseColor.rgb * volume.a + volume.rgb;
                 if (_RetroFinalColorParams.x > 0.5)
                 {
@@ -97,7 +102,7 @@ Shader "Hidden/RetroPSX/VolumetricComposite"
                     srgb = round(saturate(srgb) * levels) / levels;
                     composite = (half3)SRGBToLinear(srgb);
                 }
-                return half4(composite, baseColor.a);
+                return half4(composite, _RetroPreserveAlpha > 0.5 ? baseColor.a : 1.0);
             }
             ENDHLSL
         }

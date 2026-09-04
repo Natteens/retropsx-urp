@@ -1,6 +1,8 @@
 using System.IO;
 using NUnit.Framework;
 using UnityEditor.PackageManager;
+using UnityEngine;
+using RetroPSX.Rendering;
 
 namespace RetroPSX.Tests
 {
@@ -19,6 +21,33 @@ namespace RetroPSX.Tests
                 "Punctual shadow casters must not be clamped to the near plane on reversed-Z platforms.");
             StringAssert.DoesNotContain("clipPosition.z = max", source,
                 "Punctual shadow casters must not be clamped to the near plane on forward-Z platforms.");
+        }
+
+        [Test]
+        public void RuntimeShaderResourcesContainEveryPostShader()
+        {
+            RetroPSXShaderResources shaders = Resources.Load<RetroPSXShaderResources>(RetroPSXShaderResources.ResourcePath);
+
+            Assert.That(shaders, Is.Not.Null);
+            Assert.That(shaders.Resolve?.name, Is.EqualTo("Hidden/RetroPSX/Resolve"));
+            Assert.That(shaders.Presentation?.name, Is.EqualTo("Hidden/RetroPSX/Presentation"));
+            Assert.That(shaders.Volumetric?.name, Is.EqualTo("Hidden/RetroPSX/VolumetricRaymarch"));
+            Assert.That(shaders.VolumetricComposite?.name, Is.EqualTo("Hidden/RetroPSX/VolumetricComposite"));
+            Assert.That(shaders.CRT?.name, Is.EqualTo("Hidden/RetroPSX/CRT"));
+        }
+
+        [TestCase("Raster/RetroPSXResolve.shader", "_RetroPreserveAlpha > 0.5 ? original.a : 1.0")]
+        [TestCase("Raster/RetroPSXPresentation.shader", "_RetroPreserveAlpha > 0.5 ? color.a : 1.0")]
+        [TestCase("Atmosphere/RetroPSXVolumetricComposite.shader", "_RetroPreserveAlpha > 0.5 ? baseColor.a : 1.0")]
+        [TestCase("Display/RetroPSXCRT.shader", "_RetroPreserveAlpha > 0.5 ? centerSample.a : 1.0")]
+        public void FinalImageShadersUseExplicitAlphaPolicy(string relativePath, string expectedExpression)
+        {
+            PackageInfo package = PackageInfo.FindForAssembly(typeof(RetroPSXShaderContractTests).Assembly);
+            Assert.That(package, Is.Not.Null);
+            string path = Path.Combine(package.resolvedPath, "Runtime", "Shaders", relativePath);
+            string source = File.ReadAllText(path);
+
+            StringAssert.Contains(expectedExpression, source);
         }
     }
 }

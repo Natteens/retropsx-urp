@@ -25,11 +25,12 @@ namespace RetroPSX.Rendering
         public override void Create()
         {
             DestroyMaterials();
-            resolveMaterial = CreateMaterial("Hidden/RetroPSX/Resolve");
-            presentationMaterial = CreateMaterial("Hidden/RetroPSX/Presentation");
-            volumetricMaterial = CreateMaterial("Hidden/RetroPSX/VolumetricRaymarch");
-            volumetricCompositeMaterial = CreateMaterial("Hidden/RetroPSX/VolumetricComposite");
-            crtMaterial = CreateMaterial("Hidden/RetroPSX/CRT");
+            RetroPSXShaderResources shaders = Resources.Load<RetroPSXShaderResources>(RetroPSXShaderResources.ResourcePath);
+            resolveMaterial = CreateMaterial(shaders != null ? shaders.Resolve : null);
+            presentationMaterial = CreateMaterial(shaders != null ? shaders.Presentation : null);
+            volumetricMaterial = CreateMaterial(shaders != null ? shaders.Volumetric : null);
+            volumetricCompositeMaterial = CreateMaterial(shaders != null ? shaders.VolumetricComposite : null);
+            crtMaterial = CreateMaterial(shaders != null ? shaders.CRT : null);
 
             setupPass = new RetroPSXGlobalSetupPass("RetroPSX / Material Globals")
             {
@@ -58,7 +59,12 @@ namespace RetroPSX.Rendering
             bool profileReady = profile != null && profile.Enabled && profile.IsComplete;
             RetroCameraPolicy policy = profileReady
                 ? RetroCameraUtility.ResolvePolicy(
-                    renderingData.cameraData.cameraType, renderGameCameras, profile.SceneViewPreview, overlay)
+                    renderingData.cameraData.cameraType,
+                    renderGameCameras,
+                    profile.SceneViewPreview,
+                    overlay,
+                    renderingData.cameraData.targetTexture != null,
+                    renderingData.cameraData.isAlphaOutputEnabled)
                 : default;
             setupPass.SetProfile(policy.WorldEffects ? profile : null, policy.FullPipeline);
             renderer.EnqueuePass(setupPass);
@@ -66,7 +72,7 @@ namespace RetroPSX.Rendering
             bool needsImagePass = policy.FullPipeline || (policy.WorldEffects && profile.Volumetrics.Enabled);
             if (needsImagePass && postPass != null && postPass.HasRequiredMaterials)
             {
-                postPass.SetProfile(profile, policy.FullPipeline);
+                postPass.SetProfile(profile, policy.FullPipeline, policy.PreserveAlpha);
                 postPass.ConfigureInput(ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Depth);
                 renderer.EnqueuePass(postPass);
             }
@@ -92,9 +98,8 @@ namespace RetroPSX.Rendering
             base.Dispose(disposing);
         }
 
-        private static Material CreateMaterial(string shaderName)
+        private static Material CreateMaterial(Shader shader)
         {
-            Shader shader = Shader.Find(shaderName);
             return shader != null ? CoreUtils.CreateEngineMaterial(shader) : null;
         }
 
