@@ -1,3 +1,10 @@
+## [1.1.5](https://github.com/Natteens/retropsx-urp/compare/v1.1.4...v1.1.5) (2026-09-05)
+
+
+### Bug Fixes
+
+* prevent transparent RenderTexture edge halos ([6ab1d9e](https://github.com/Natteens/retropsx-urp/commit/6ab1d9eedee0f8ef3984c8ffe674718c3a93c52c))
+
 ## Unreleased
 
 ### Bug Fixes
