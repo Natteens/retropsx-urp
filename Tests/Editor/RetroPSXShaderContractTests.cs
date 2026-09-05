@@ -61,6 +61,9 @@ namespace RetroPSX.Tests
             StringAssert.Contains("half4 SampleDisplay(float2 uv)", source);
             StringAssert.Contains("sample00.rgb * sample00.a", source);
             StringAssert.Contains("premultiplied / alpha", source);
+            StringAssert.Contains("half3 SampleCoveredColor(float2 uv, half4 centerSample)", source);
+            StringAssert.Contains("sample.a / max(centerSample.a", source);
+            StringAssert.Contains("centerSample.a <= 0.0001", source);
         }
     }
 }

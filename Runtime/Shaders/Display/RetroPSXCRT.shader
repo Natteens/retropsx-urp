@@ -70,6 +70,16 @@ Shader "Hidden/RetroPSX/CRT"
                 return half4(color, alpha);
             }
 
+            half3 SampleCoveredColor(float2 uv, half4 centerSample)
+            {
+                half4 sample = SampleDisplay(uv);
+                if (_RetroPreserveAlpha <= 0.5)
+                    return sample.rgb;
+
+                half coverage = saturate(sample.a / max(centerSample.a, 0.0001));
+                return lerp(centerSample.rgb, sample.rgb, coverage);
+            }
+
             half4 Frag(Varyings input) : SV_Target
             {
                 float2 uv = input.texcoord;
@@ -87,14 +97,17 @@ Shader "Hidden/RetroPSX/CRT"
                 float chroma = _RetroCRTParams2.x * texel.x;
 
                 half4 centerSample = SampleDisplay(uv);
-                half red = SampleDisplay(uv + float2(chroma, 0)).r;
+                if (_RetroPreserveAlpha > 0.5 && centerSample.a <= 0.0001)
+                    return half4(0.0, 0.0, 0.0, 0.0);
+
+                half red = SampleCoveredColor(uv + float2(chroma, 0), centerSample).r;
                 half green = centerSample.g;
-                half blue = SampleDisplay(uv - float2(chroma, 0)).b;
+                half blue = SampleCoveredColor(uv - float2(chroma, 0), centerSample).b;
                 half3 color = half3(red, green, blue);
 
                 half3 neighbors =
-                    SampleDisplay(uv + float2(texel.x, 0)).rgb +
-                    SampleDisplay(uv - float2(texel.x, 0)).rgb;
+                    SampleCoveredColor(uv + float2(texel.x, 0), centerSample) +
+                    SampleCoveredColor(uv - float2(texel.x, 0), centerSample);
 
                 color = lerp(color, (color * 2.0 + neighbors) * 0.25, saturate(_RetroCRTParams1.z));
 

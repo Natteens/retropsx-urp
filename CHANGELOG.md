@@ -5,12 +5,6 @@
 
 * prevent transparent RenderTexture edge halos ([6ab1d9e](https://github.com/Natteens/retropsx-urp/commit/6ab1d9eedee0f8ef3984c8ffe674718c3a93c52c))
 
-## Unreleased
-
-### Bug Fixes
-
-* prevent transparent RenderTexture edge halos in the CRT display pass
-
 ## [1.1.4](https://github.com/Natteens/retropsx-urp/compare/v1.1.3...v1.1.4) (2026-09-05)
 
 
