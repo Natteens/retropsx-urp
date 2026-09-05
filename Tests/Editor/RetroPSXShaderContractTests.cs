@@ -49,5 +49,18 @@ namespace RetroPSX.Tests
 
             StringAssert.Contains(expectedExpression, source);
         }
+
+        [Test]
+        public void CrtFilteringIgnoresRgbFromTransparentTexels()
+        {
+            PackageInfo package = PackageInfo.FindForAssembly(typeof(RetroPSXShaderContractTests).Assembly);
+            Assert.That(package, Is.Not.Null);
+            string path = Path.Combine(package.resolvedPath, "Runtime", "Shaders", "Display", "RetroPSXCRT.shader");
+            string source = File.ReadAllText(path);
+
+            StringAssert.Contains("half4 SampleDisplay(float2 uv)", source);
+            StringAssert.Contains("sample00.rgb * sample00.a", source);
+            StringAssert.Contains("premultiplied / alpha", source);
+        }
     }
 }

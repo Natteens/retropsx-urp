@@ -30,6 +30,46 @@ Shader "Hidden/RetroPSX/CRT"
                 return frac((p3.x + p3.y) * p3.z);
             }
 
+            half4 SampleDisplay(float2 uv)
+            {
+                if (_RetroPreserveAlpha <= 0.5)
+                    return SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, uv);
+
+                float2 texel = _BlitTexture_TexelSize.xy;
+                float2 pixel = uv * _BlitTexture_TexelSize.zw - 0.5;
+                float2 basePixel = floor(pixel);
+                float2 blend = frac(pixel);
+
+                half4 sample00 = SAMPLE_TEXTURE2D(
+                    _BlitTexture, sampler_PointClamp, (basePixel + float2(0.5, 0.5)) * texel);
+                half4 sample10 = SAMPLE_TEXTURE2D(
+                    _BlitTexture, sampler_PointClamp, (basePixel + float2(1.5, 0.5)) * texel);
+                half4 sample01 = SAMPLE_TEXTURE2D(
+                    _BlitTexture, sampler_PointClamp, (basePixel + float2(0.5, 1.5)) * texel);
+                half4 sample11 = SAMPLE_TEXTURE2D(
+                    _BlitTexture, sampler_PointClamp, (basePixel + float2(1.5, 1.5)) * texel);
+
+                float4 weights = float4(
+                    (1.0 - blend.x) * (1.0 - blend.y),
+                    blend.x * (1.0 - blend.y),
+                    (1.0 - blend.x) * blend.y,
+                    blend.x * blend.y);
+
+                half alpha =
+                    sample00.a * weights.x +
+                    sample10.a * weights.y +
+                    sample01.a * weights.z +
+                    sample11.a * weights.w;
+                half3 premultiplied =
+                    sample00.rgb * sample00.a * weights.x +
+                    sample10.rgb * sample10.a * weights.y +
+                    sample01.rgb * sample01.a * weights.z +
+                    sample11.rgb * sample11.a * weights.w;
+
+                half3 color = alpha > 0.0001 ? premultiplied / alpha : half3(0.0, 0.0, 0.0);
+                return half4(color, alpha);
+            }
+
             half4 Frag(Varyings input) : SV_Target
             {
                 float2 uv = input.texcoord;
@@ -46,15 +86,15 @@ Shader "Hidden/RetroPSX/CRT"
                 float2 texel = _BlitTexture_TexelSize.xy;
                 float chroma = _RetroCRTParams2.x * texel.x;
 
-                half4 centerSample = SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, uv);
-                half red = SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, uv + float2(chroma, 0)).r;
+                half4 centerSample = SampleDisplay(uv);
+                half red = SampleDisplay(uv + float2(chroma, 0)).r;
                 half green = centerSample.g;
-                half blue = SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, uv - float2(chroma, 0)).b;
+                half blue = SampleDisplay(uv - float2(chroma, 0)).b;
                 half3 color = half3(red, green, blue);
 
                 half3 neighbors =
-                    SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, uv + float2(texel.x, 0)).rgb +
-                    SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, uv - float2(texel.x, 0)).rgb;
+                    SampleDisplay(uv + float2(texel.x, 0)).rgb +
+                    SampleDisplay(uv - float2(texel.x, 0)).rgb;
 
                 color = lerp(color, (color * 2.0 + neighbors) * 0.25, saturate(_RetroCRTParams1.z));
 
