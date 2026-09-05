@@ -1,3 +1,10 @@
+## [1.1.4](https://github.com/Natteens/retropsx-urp/compare/v1.1.3...v1.1.4) (2026-09-05)
+
+
+### Bug Fixes
+
+* apply RetroPSX pipeline to RenderTexture cameras ([d4d4539](https://github.com/Natteens/retropsx-urp/commit/d4d45395dd3f1de085d0a5e7be05d26abc667eb9))
+
 ## [1.1.3](https://github.com/Natteens/retropsx-urp/compare/v1.1.2...v1.1.3) (2026-09-04)
 
 
