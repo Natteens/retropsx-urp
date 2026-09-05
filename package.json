@@ -1,6 +1,6 @@
 {
   "name": "com.natteens.retropsxurp",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "displayName": "RetroPSX-URP",
   "description": "A modular, RenderGraph-first PSX-style rendering toolkit for Unity 6 URP.",
   "keywords": [

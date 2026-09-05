@@ -1,3 +1,10 @@
+## [1.1.7](https://github.com/Natteens/retropsx-urp/compare/v1.1.6...v1.1.7) (2026-09-05)
+
+
+### Bug Fixes
+
+* reject background volumetrics at foreground silhouettes ([1aa4916](https://github.com/Natteens/retropsx-urp/commit/1aa4916744954813e9dce81ccbb8281afa400d21))
+
 ## [1.1.6](https://github.com/Natteens/retropsx-urp/compare/v1.1.5...v1.1.6) (2026-09-05)
 
 
