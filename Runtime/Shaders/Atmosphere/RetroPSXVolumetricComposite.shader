@@ -58,34 +58,51 @@ Shader "Hidden/RetroPSX/VolumetricComposite"
                 float2 uv = input.texcoord;
                 half4 baseColor = SAMPLE_TEXTURE2D(_BlitTexture, sampler_PointClamp, uv);
                 float centerDepth = EyeDepth(uv);
-                half4 centerVolume = SAMPLE_TEXTURE2D(_RetroVolumeTexture, sampler_PointClamp, uv);
-                half4 volume = centerVolume;
-                float weightSum = 1.0;
-                float centerLuminance = ScatteringLuminance(centerVolume.rgb);
-                static const float2 offsets[5] = {
-                    float2(0,0), float2(-1,0), float2(1,0), float2(0,-1), float2(0,1) };
+                // Match each volume sample to the exact depth UV used by its raymarch.
+                // The destination UV can lie on an object while the containing low-res
+                // texel was raymarched through the background.
+                float2 volumePixel = floor(uv * _RetroVolumeTexelSize.zw);
+                half4 samples[9];
+                float depthDeltas[9];
+                float nearestDelta = 1e20;
+                int nearestIndex = 0;
                 [unroll]
-                for (int index = 1; index < 5; index++)
+                for (int index = 0; index < 9; index++)
                 {
-                    float2 sampleUV = uv + offsets[index] * _RetroVolumeTexelSize.xy;
+                    float2 offset = float2(index % 3 - 1, index / 3 - 1);
+                    float2 samplePixel = clamp(volumePixel + offset, 0.0, _RetroVolumeTexelSize.zw - 1.0);
+                    float2 sampleUV = (samplePixel + 0.5) * _RetroVolumeTexelSize.xy;
                     float sampleDepth = EyeDepth(sampleUV);
-                    float relativeDepthDelta = abs(sampleDepth - centerDepth) / max(min(sampleDepth, centerDepth), 0.25);
-                    half4 sampleVolume = SAMPLE_TEXTURE2D(_RetroVolumeTexture, sampler_PointClamp, sampleUV);
-
-                    // Camera depth alone cannot identify a light-space shadow edge.
-                    // Preserve sharp visibility changes by also rejecting neighbors
-                    // whose scattering or transmittance differs from the center texel.
+                    depthDeltas[index] = abs(sampleDepth - centerDepth) / max(min(sampleDepth, centerDepth), 0.25);
+                    samples[index] = SAMPLE_TEXTURE2D(_RetroVolumeTexture, sampler_PointClamp, sampleUV);
+                    // Prefer the central sample when depths tie, retaining shadow edges.
+                    if (depthDeltas[index] < nearestDelta || (index == 4 && depthDeltas[index] <= nearestDelta))
+                    {
+                        nearestDelta = depthDeltas[index];
+                        nearestIndex = index;
+                    }
+                }
+                half4 referenceVolume = samples[nearestIndex];
+                float referenceLuminance = ScatteringLuminance(referenceVolume.rgb);
+                half4 volume = 0;
+                float weightSum = 0.0;
+                [unroll]
+                for (int index = 0; index < 9; index++)
+                {
+                    half4 sampleVolume = samples[index];
                     float sampleLuminance = ScatteringLuminance(sampleVolume.rgb);
-                    float relativeScatteringDelta = abs(sampleLuminance - centerLuminance)
-                        / max(max(sampleLuminance, centerLuminance), 0.02);
-                    float transmittanceDelta = abs(sampleVolume.a - centerVolume.a);
-                    float depthWeight = exp(-relativeDepthDelta * _RetroVolumeParams3.y * 8.0);
+                    float relativeScatteringDelta = abs(sampleLuminance - referenceLuminance)
+                        / max(max(sampleLuminance, referenceLuminance), 0.02);
+                    float transmittanceDelta = abs(sampleVolume.a - referenceVolume.a);
+                    float depthWeight = exp(-depthDeltas[index] * _RetroVolumeParams3.y * 8.0);
                     float visibilityEdgeWeight = exp(-relativeScatteringDelta * 8.0 - transmittanceDelta * 12.0);
                     float weight = depthWeight * visibilityEdgeWeight;
                     volume += sampleVolume * weight;
                     weightSum += weight;
                 }
-                volume /= max(weightSum, 1e-4);
+                // A thin surface may have no corresponding low-res sample. Never
+                // substitute unrelated background scattering for that surface.
+                volume = weightSum > 1e-4 ? volume / weightSum : half4(0.0, 0.0, 0.0, 1.0);
                 if (_RetroPSXDebugMode == 7)
                     return half4(volume.rgb, _RetroPreserveAlpha > 0.5 ? baseColor.a : 1.0);
                 if (_RetroPSXDebugMode == 10)
