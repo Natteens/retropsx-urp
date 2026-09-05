@@ -1,3 +1,10 @@
+## [1.1.6](https://github.com/Natteens/retropsx-urp/compare/v1.1.5...v1.1.6) (2026-09-05)
+
+
+### Bug Fixes
+
+* keep CRT sampling inside transparent silhouettes ([da04d7b](https://github.com/Natteens/retropsx-urp/commit/da04d7b934336d35bbeeb1614f30705124ded39b))
+
 ## [1.1.5](https://github.com/Natteens/retropsx-urp/compare/v1.1.4...v1.1.5) (2026-09-05)
 
 
