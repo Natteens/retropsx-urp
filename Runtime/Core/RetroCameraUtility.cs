@@ -44,7 +44,7 @@ namespace RetroPSX
                 return default;
 
             if (cameraType == CameraType.Game && gameCamerasEnabled)
-                return new RetroCameraPolicy(true, !hasTargetTexture, isAlphaOutputEnabled);
+                return new RetroCameraPolicy(true, true, isAlphaOutputEnabled);
             if (cameraType == CameraType.SceneView && sceneViewMode != RetroSceneViewMode.Off)
                 return new RetroCameraPolicy(true, sceneViewMode == RetroSceneViewMode.FullPipeline, isAlphaOutputEnabled);
             return default;

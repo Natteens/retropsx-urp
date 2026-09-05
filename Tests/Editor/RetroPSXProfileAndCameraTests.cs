@@ -37,7 +37,8 @@ namespace RetroPSX.Tests
         }
 
         [TestCase(CameraType.Game, RetroSceneViewMode.FullPipeline, false, false, false, true, true, false)]
-        [TestCase(CameraType.Game, RetroSceneViewMode.FullPipeline, false, true, true, true, false, true)]
+        [TestCase(CameraType.Game, RetroSceneViewMode.FullPipeline, false, true, true, true, true, true)]
+        [TestCase(CameraType.Game, RetroSceneViewMode.FullPipeline, false, true, false, true, true, false)]
         [TestCase(CameraType.SceneView, RetroSceneViewMode.FullPipeline, false, true, true, true, true, true)]
         [TestCase(CameraType.SceneView, RetroSceneViewMode.WorldEffects, false, true, true, true, false, true)]
         [TestCase(CameraType.SceneView, RetroSceneViewMode.Off, false, true, true, false, false, false)]
@@ -82,6 +83,27 @@ namespace RetroPSX.Tests
             Assert.That(scene.InternalSize, Is.EqualTo(new Vector2Int(343, 240)));
             Assert.That(scene.SourceSize, Is.EqualTo(new Vector2Int(1000, 700)));
             Object.DestroyImmediate(profile);
+        }
+
+        [Test]
+        public void RenderTextureUsesProfileRasterWithoutChangingOutputDimensions()
+        {
+            RetroRasterProfile profile = ScriptableObject.CreateInstance<RetroRasterProfile>();
+            try
+            {
+                RetroCameraPolicy policy = RetroCameraUtility.ResolvePolicy(
+                    CameraType.Game, true, RetroSceneViewMode.Off, false, true, true);
+                RetroRasterContext context = RetroCameraUtility.BuildRasterContext(profile, 1024, 576, policy.FullPipeline);
+                Assert.That(context.SourceSize, Is.EqualTo(new Vector2Int(1024, 576)));
+                Assert.That(context.InternalSize, Is.EqualTo(new Vector2Int(427, 240)));
+                Assert.That(context.Viewport, Is.EqualTo(new RectInt(0, 0, 1024, 576)));
+                Assert.That(context.IsNative, Is.False);
+                Assert.That(policy.PreserveAlpha, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(profile);
+            }
         }
 
         [Test]

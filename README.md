@@ -42,6 +42,8 @@ Add the feature to every Renderer Data that should render RetroPSX. Scene View u
 
 **Scene View Preview** defaults to **World Effects**. It keeps the editor viewport at native resolution while previewing integrated materials, fog, and volumetrics. **Off** leaves Scene View as ordinary URP, while **Full Pipeline** also previews the low-resolution presentation, final color treatment, and display pass.
 
+Base game cameras targeting a RenderTexture run the same pipeline as screen cameras, including canonical resolve, presentation, and display effects. The target keeps its configured output size; the Raster profile controls the internal pixel grid. Alpha is preserved when URP enables alpha output. For transparent inventory previews, use an RGBA target and a transparent camera clear color; if URP post-processing is enabled, also enable **Alpha Processing** on the URP asset.
+
 ## Profiles
 
 The root pipeline profile links separate assets for raster, geometry, color, lighting, fog, volumetrics, display, and debug settings. Profiles own configuration only; per-camera textures are transient RenderGraph resources.
