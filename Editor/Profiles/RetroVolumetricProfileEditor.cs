@@ -14,6 +14,7 @@ namespace RetroPSX.Editor
             bool centered = serializedObject.FindProperty("pixelated").boolValue || stylizedDirectional;
             bool jitter = serializedObject.FindProperty("jitter").boolValue;
             bool lightSteps = serializedObject.FindProperty("lightSteps").intValue > 1;
+            bool shafts = serializedObject.FindProperty("sunShafts").floatValue > 0f;
             SerializedProperty property = serializedObject.GetIterator();
             for (bool enter = true; property.NextVisible(enter); enter = false)
             {
@@ -24,8 +25,9 @@ namespace RetroPSX.Editor
                     "resolutionDivisor" or "raySteps" when !custom => "Set by Quality. Select Custom to use this value.",
                     "jitter" or "jitterStrength" when centered => "Pixelated and Stylized Directional use centered samples, so jitter is off.",
                     "jitterStrength" when !jitter => "Jitter is disabled.",
-                    "directionalTint" or "directionalContrast" or "directionalDither" when !stylizedDirectional => "Requires Stylized Directional.",
-                    "directionalDither" when !lightSteps => "Requires Light Steps above 1.",
+                    "directionalContrast" when !stylizedDirectional => "Requires Stylized Directional.",
+                    "directionalTint" when !stylizedDirectional && !shafts => "Requires Stylized Directional or Sun Shafts.",
+                    "directionalDither" when !shafts && !(stylizedDirectional && lightSteps) => "Requires Sun Shafts, or Stylized Directional with Light Steps above 1.",
                     _ => null
                 };
                 using (new EditorGUI.DisabledScope(inactive != null))

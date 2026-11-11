@@ -24,6 +24,8 @@ namespace RetroPSX
         [SerializeField, Range(0f, 4f)] private float scattering = 1f;
         [SerializeField, Range(-0.8f, 0.8f)] private float anisotropy = 0.15f;
         [SerializeField] private Color ambient = new(0.08f, 0.09f, 0.12f, 1f);
+        [SerializeField, Min(0f), Tooltip("Distance over which the atmosphere fades in from the camera. Sun shafts are not faded.")]
+        private float nearFade;
         [Header("Directional Light")]
         [SerializeField, Range(0f, 1f)] private float directionalContribution = 0.75f;
         [SerializeField, Tooltip("Styles the main directional light's scattering through shadowed atmosphere.")]
@@ -32,8 +34,11 @@ namespace RetroPSX
         private Color directionalTint = Color.white;
         [SerializeField, Range(0.5f, 4f), Tooltip("Curve on the integrated sun visibility, applied before Light Steps. One is physical; higher narrows partially shadowed rays, lower lifts them.")]
         private float directionalContrast = 1f;
-        [SerializeField, Range(0f, 1f), Tooltip("Ordered dithering of directional Light Steps.")]
+        [SerializeField, Range(0f, 1f), Tooltip("Ordered dithering of directional Light Steps and of sun shaft sampling.")]
         private float directionalDither;
+        [Header("Directional Sun Shafts")]
+        [SerializeField, Range(0f, 1f), Tooltip("Scattering density of sunlit air, independent of the atmosphere. Shafts follow the main light and its shadows; open, fully lit air adds no veil. Zero disables them.")]
+        private float sunShafts;
         [Header("Retro Stylization")]
         [SerializeField, Range(0, 32), Tooltip("Quantizes the height density into layers. Zero or one leaves it continuous.")]
         private int densitySteps = 8;
@@ -60,6 +65,8 @@ namespace RetroPSX
         internal bool StylizedDirectional => stylizedDirectional;
         internal float DirectionalContrast => directionalContrast;
         internal float DirectionalDither => directionalDither;
+        internal float SunShafts => sunShafts;
+        internal float NearFade => nearFade;
         internal Color DirectionalTint => directionalTint.linear;
         public bool Jitter => jitter;
         public float JitterStrength => jitterStrength;
@@ -93,6 +100,8 @@ namespace RetroPSX
             geometryDepthBias = Mathf.Max(0f, geometryDepthBias);
             depthEdgeSharpness = Mathf.Clamp(depthEdgeSharpness, 0.25f, 16f);
             maximumLocalLights = Mathf.Clamp(maximumLocalLights, 1, 4);
+            sunShafts = Mathf.Clamp01(sunShafts);
+            nearFade = Mathf.Max(0f, nearFade);
         }
     }
 }

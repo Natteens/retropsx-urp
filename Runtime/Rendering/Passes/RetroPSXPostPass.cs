@@ -201,8 +201,8 @@ namespace RetroPSX.Rendering
             RetroVolumetricProfile volume = profile.Volumetrics;
             volumetricMaterial.SetVector(RetroPSXShaderIDs.VolumeParams0, new Vector4(volume.Density, volume.MaxDistance, volume.BaseHeight, volume.HeightFalloff));
             volumetricMaterial.SetVector(RetroPSXShaderIDs.VolumeParams1, new Vector4(volume.Extinction, volume.Scattering, volume.Anisotropy, volume.DirectionalContribution));
-            bool stylizedSun = volume.StylizedDirectional && volume.Density > 0f && volume.DirectionalContribution > 0f
-                && lightData.mainLightIndex >= 0 && lightData.visibleLights[lightData.mainLightIndex].lightType == LightType.Directional;
+            bool directionalSun = lightData.mainLightIndex >= 0 && lightData.visibleLights[lightData.mainLightIndex].lightType == LightType.Directional;
+            bool stylizedSun = volume.StylizedDirectional && volume.Density > 0f && volume.DirectionalContribution > 0f && directionalSun;
             float jitter = volume.Jitter && !volume.Pixelated && !stylizedSun ? volume.JitterStrength : 0f;
             volumetricMaterial.SetVector(RetroPSXShaderIDs.VolumeParams2, new Vector4(
                 steps, volume.LightSteps, jitter, volume.DensitySteps));
@@ -212,6 +212,8 @@ namespace RetroPSX.Rendering
             volumetricMaterial.SetVector(RetroPSXShaderIDs.VolumeParams3, new Vector4(
                 volume.GeometryDepthBias, volume.DepthEdgeSharpness, profile.Debug.VolumetricLightIndex, 0f));
             volumetricMaterial.SetColor(RetroPSXShaderIDs.VolumeAmbient, volume.Ambient.linear);
+            volumetricMaterial.SetVector(RetroPSXShaderIDs.SunShaftParams, new Vector4(
+                directionalSun ? volume.SunShafts : 0f, volume.NearFade, directionalSun && volume.SunShafts > 0f ? volume.DirectionalDither : 0f, 0f));
 
             int count = RetroVolumetricLightRegistry.CopyVisible(camera, visibleLights, volume.MaximumLocalLights);
             for (int index = 0; index < MaximumLocalLights; index++)

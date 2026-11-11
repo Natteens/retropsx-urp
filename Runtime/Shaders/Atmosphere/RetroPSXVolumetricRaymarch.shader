@@ -25,6 +25,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
             float4 _RetroVolumeParams2;
             float4 _RetroVolumeParams3;
             float4 _RetroVolumeTexelSize;
+            float4 _RetroSunShaftParams;
             float4 _RetroDirectionalVolumeStyle;
             half4 _RetroDirectionalVolumeTint;
             half4 _RetroVolumeAmbient;
@@ -356,25 +357,46 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                 float atmosphereIntegral = 0.0;
                 // The global direction points toward the light; positive anisotropy peaks looking into it.
                 float phase = PhaseHG(dot(rayDirection, SafeNormalize(_RetroPSXMainLightDirection.xyz)), _RetroVolumeParams1.z);
-                float3 positionWS = rayOrigin + rayDirection * (stepLength * (0.5 + jitter));
+                // Sun shafts offset samples with an ordered pattern, turning step aliasing into stable dither.
+                float3 positionWS = rayOrigin + rayDirection * (stepLength * (0.5 + jitter + dither * _RetroSunShaftParams.z));
                 float transmittance = 1.0;
                 float3 scattering = 0.0;
                 float visibilitySum = 0.0;
                 float visibilityWeight = 0.0;
 
+                float shaftDensity = _RetroSunShaftParams.x;
+                float shaftThroughput = 1.0;
+                float shaftIntegral = 0.0;
+                float shadowedLength = 0.0;
+                float marchedLength = 0.0;
+
                 [loop]
-                for (int stepIndex = 0; stepIndex < steps && rayLength > 0.0 && _RetroVolumeParams0.x > 0.0; stepIndex++)
+                for (int stepIndex = 0; stepIndex < steps && rayLength > 0.0 && (_RetroVolumeParams0.x > 0.0 || shaftDensity > 0.0); stepIndex++)
                 {
                     float densityShape = exp(-max(0.0, positionWS.y - _RetroVolumeParams0.z) * _RetroVolumeParams0.w);
                     if (_RetroVolumeParams2.w > 1.0)
                         densityShape = round(densityShape * _RetroVolumeParams2.w) / _RetroVolumeParams2.w;
                     float density = _RetroVolumeParams0.x * densityShape;
+                    if (_RetroSunShaftParams.y > 0.0)
+                        density *= smoothstep(0.0, _RetroSunShaftParams.y, marchedLength + 0.5 * stepLength);
 
                     float sampleWeight = transmittance * density * stepLength;
                     float3 incoming = _RetroVolumeAmbient.rgb;
-                    if (_RetroVolumeParams1.w > 1e-4)
+                    if (_RetroVolumeParams1.w > 1e-4 || shaftDensity > 0.0)
                     {
                         float mainShadow = SampleRetroPSXMainLightVolumeShadow(positionWS, _RetroDirectionalVolumeStyle.w);
+                        if (shaftDensity > 0.0)
+                        {
+                            // Sunlit air has its own medium, attenuated by the atmosphere in front. Each lit
+                            // sample is weighted by how much of the ray before it was shadowed: a beam seen
+                            // from shadowed air reads fully, open sunlit air in front of the camera adds no veil.
+                            float opacity = 1.0 - exp(-shaftDensity * mainShadow * stepLength);
+                            float shadowedBefore = (shadowedLength + (1.0 - mainShadow) * 0.5 * stepLength)
+                                / (marchedLength + 0.5 * stepLength);
+                            shaftIntegral += shaftThroughput * opacity * transmittance * shadowedBefore;
+                            shaftThroughput *= 1.0 - opacity;
+                            shadowedLength += (1.0 - mainShadow) * stepLength;
+                        }
                         if (stylizedSun)
                         {
                             atmosphereIntegral += sampleWeight;
@@ -426,9 +448,12 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
 
                     scattering += incoming * sampleWeight * _RetroVolumeParams1.y;
                     transmittance *= exp(-density * _RetroVolumeParams1.x * stepLength);
+                    marchedLength += stepLength;
                     if (transmittance < 0.01) break;
                     positionWS += rayDirection * stepLength;
                 }
+                float angularWeight = 2.0 * phase / (phase + rcp(12.56637));
+                scattering += _RetroPSXMainLightColor.rgb * _RetroDirectionalVolumeTint.rgb * (shaftIntegral * angularWeight);
                 if (stylizedSun && atmosphereIntegral > 1e-5)
                 {
                     // Contrast shapes the integrated sun visibility (1 = physical) before quantization,
@@ -440,7 +465,6 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                         visibility = saturate(round(sqrt(visibility) * bands + dither * _RetroDirectionalVolumeStyle.z) / bands);
                         visibility *= visibility;
                     }
-                    float angularWeight = 2.0 * phase / (phase + rcp(12.56637));
                     scattering += _RetroPSXMainLightColor.rgb * _RetroDirectionalVolumeTint.rgb
                         * (visibility * atmosphereIntegral * angularWeight * _RetroVolumeParams1.w * _RetroVolumeParams1.y);
                 }

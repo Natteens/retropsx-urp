@@ -38,6 +38,7 @@ namespace RetroPSX.Rendering
         internal static readonly int ShaftRight = Shader.PropertyToID("_RetroShaftRight");
         internal static readonly int VolumeParams3 = Shader.PropertyToID("_RetroVolumeParams3");
         internal static readonly int VolumeAmbient = Shader.PropertyToID("_RetroVolumeAmbient");
+        internal static readonly int SunShaftParams = Shader.PropertyToID("_RetroSunShaftParams");
         internal static readonly int LocalLightCount = Shader.PropertyToID("_RetroLocalLightCount");
         internal static readonly int LocalLightPosRange = Shader.PropertyToID("_RetroLocalLightPosRange");
         internal static readonly int LocalLightDirAngle = Shader.PropertyToID("_RetroLocalLightDirAngle");
