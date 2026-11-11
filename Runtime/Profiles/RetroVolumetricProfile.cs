@@ -30,17 +30,19 @@ namespace RetroPSX
         private bool stylizedDirectional;
         [SerializeField, Tooltip("Multiplies the main directional light color.")]
         private Color directionalTint = Color.white;
-        [SerializeField, Range(0.5f, 4f), Tooltip("Shapes the contrast of the integrated sun beams.")]
-        private float directionalContrast = 1.5f;
+        [SerializeField, Range(0.5f, 4f), Tooltip("Curve on the integrated sun visibility, applied before Light Steps. One is physical; higher narrows partially shadowed rays, lower lifts them.")]
+        private float directionalContrast = 1f;
         [SerializeField, Range(0f, 1f), Tooltip("Ordered dithering of directional Light Steps.")]
         private float directionalDither;
         [Header("Retro Stylization")]
-        [SerializeField, Range(0, 32)] private int densitySteps = 8;
+        [SerializeField, Range(0, 32), Tooltip("Quantizes the height density into layers. Zero or one leaves it continuous.")]
+        private int densitySteps = 8;
         [SerializeField, Range(0, 32), Tooltip("Quantizes local light and stylized directional scattering into bands. Zero or one leaves it continuous.")]
         private int lightSteps = 8;
         [Header("Depth and Limits")]
         [SerializeField, Min(0f)] private float geometryDepthBias = 0.05f;
-        [SerializeField, Range(0.25f, 16f)] private float depthEdgeSharpness = 4f;
+        [SerializeField, Range(0.25f, 16f), Tooltip("How strictly a volumetric sample must lie on the pixel's surface during reconstruction, including Pixelated.")]
+        private float depthEdgeSharpness = 4f;
         [SerializeField, Range(1, 4)] private int maximumLocalLights = 4;
 
         public bool Enabled => enabled;

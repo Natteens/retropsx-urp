@@ -169,17 +169,19 @@ namespace RetroPSX.Rendering
             volumeDesc.filterMode = FilterMode.Point;
             TextureHandle volume = renderGraph.CreateTexture(volumeDesc);
 
-            ConfigureVolumetricMaterial(cameraData.camera, steps, lightData, mainShadows.IsValid() ? shadowCascades : 0);
+            var volumeTexelSize = new Vector4(1f / volumeDesc.width, 1f / volumeDesc.height, volumeDesc.width, volumeDesc.height);
+            volumetricMaterial.SetVector(RetroPSXShaderIDs.VolumeTexelSize, volumeTexelSize);
+            float reconstructionDepth = ConfigureVolumetricMaterial(cameraData.camera, steps, lightData, mainShadows.IsValid() ? shadowCascades : 0);
             AddBlit(renderGraph, "RetroPSX / Volumetric Raymarch", depth, volume, volumetricMaterial, 0, depth,
                 mainShadows, additionalShadows, true, RetroPSXShaderIDs.VolumeTexture);
 
             TextureDesc compositeDesc = lowDesc;
             compositeDesc.name = "RetroPSX.VolumetricComposite";
             TextureHandle composite = renderGraph.CreateTexture(compositeDesc);
-            volumetricCompositeMaterial.SetVector(RetroPSXShaderIDs.VolumeTexelSize, new Vector4(
-                1f / volumeDesc.width, 1f / volumeDesc.height, volumeDesc.width, volumeDesc.height));
+            volumetricCompositeMaterial.SetVector(RetroPSXShaderIDs.VolumeTexelSize, volumeTexelSize);
             volumetricCompositeMaterial.SetVector(RetroPSXShaderIDs.VolumeParams3, new Vector4(
-                profile.Volumetrics.GeometryDepthBias, profile.Volumetrics.DepthEdgeSharpness, 0f, profile.Volumetrics.Pixelated ? 1f : 0f));
+                profile.Volumetrics.GeometryDepthBias, profile.Volumetrics.DepthEdgeSharpness, reconstructionDepth,
+                profile.Volumetrics.Pixelated ? 1f : 0f));
             RetroColorProfile color = profile.Color;
             volumetricCompositeMaterial.SetVector(RetroPSXShaderIDs.FinalColorParams, new Vector4(
                 applyFinalColor && color.QuantizeFinalImage ? 1f : 0f,
@@ -194,7 +196,7 @@ namespace RetroPSX.Rendering
             return composite;
         }
 
-        private void ConfigureVolumetricMaterial(Camera camera, int steps, UniversalLightData lightData, int shadowCascades)
+        private float ConfigureVolumetricMaterial(Camera camera, int steps, UniversalLightData lightData, int shadowCascades)
         {
             RetroVolumetricProfile volume = profile.Volumetrics;
             volumetricMaterial.SetVector(RetroPSXShaderIDs.VolumeParams0, new Vector4(volume.Density, volume.MaxDistance, volume.BaseHeight, volume.HeightFalloff));
@@ -228,6 +230,14 @@ namespace RetroPSX.Rendering
             volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.ShaftSourceTint, shaftSourceTint);
             volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.ShaftEndTint, shaftEndTint);
             volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.ShaftRight, shaftRight);
+
+            // Past this view depth every surface receives the same scattering; shafts may extend beyond Max Distance.
+            float reconstructionDepth = volume.MaxDistance;
+            Vector3 cameraPosition = camera.transform.position;
+            for (int index = 0; index < count; index++)
+                if (lightParams[index].x > 1.5f)
+                    reconstructionDepth = Mathf.Max(reconstructionDepth, Vector3.Distance(cameraPosition, lightPosRange[index]) + lightPosRange[index].w);
+            return reconstructionDepth;
         }
 
         private void PackLight(int index, RetroVolumetricLight volume, UniversalLightData lightData)

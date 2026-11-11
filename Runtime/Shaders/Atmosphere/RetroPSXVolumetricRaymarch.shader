@@ -24,6 +24,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
             float4 _RetroVolumeParams1;
             float4 _RetroVolumeParams2;
             float4 _RetroVolumeParams3;
+            float4 _RetroVolumeTexelSize;
             float4 _RetroDirectionalVolumeStyle;
             half4 _RetroDirectionalVolumeTint;
             half4 _RetroVolumeAmbient;
@@ -46,6 +47,13 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
             TEXTURE2D(_RetroPattern1); SAMPLER(sampler_RetroPattern1);
             TEXTURE2D(_RetroPattern2); SAMPLER(sampler_RetroPattern2);
             TEXTURE2D(_RetroPattern3); SAMPLER(sampler_RetroPattern3);
+
+            // Must match the composite: picks one depth pixel per volume texel, away from the pixel
+            // boundaries that even resolution ratios would otherwise leave to rounding.
+            float2 VolumeDepthUV(float2 volumePixel)
+            {
+                return (floor((volumePixel + 0.5) * _ScreenSize.xy * _RetroVolumeTexelSize.xy - 0.25) + 0.5) * _ScreenSize.zw;
+            }
 
             float Hash12(float2 p)
             {
@@ -294,7 +302,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                     if (shape.z > 0.0) falloff *= smoothstep(0.0, shape.z, 1.0 - distance01);
                     float attenuation = edge * falloff * (1.0 - radial * shape.x);
                     if (bandCount > 1.0)
-                        attenuation = round(attenuation * bandCount + bandOffset) / bandCount;
+                        attenuation = saturate(round(attenuation * bandCount + bandOffset) / bandCount);
                     if (attenuation <= 1e-4) continue;
 
                     attenuation *= lerp(1.0, Pattern(index, positionWS, relative, source.w, cone.xyz), patternStrength);
@@ -316,7 +324,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
 
             half4 Frag(Varyings input) : SV_Target
             {
-                float2 uv = input.texcoord;
+                float2 uv = VolumeDepthUV(floor(input.texcoord * _RetroVolumeTexelSize.zw));
                 float rawDepth = SampleSceneDepth(uv);
                 #if UNITY_REVERSED_Z
                     float deviceDepth = rawDepth;
@@ -330,10 +338,14 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                 float3 endWS = ComputeWorldSpacePosition(uv, deviceDepth, UNITY_MATRIX_I_VP);
                 float3 nearWS = ComputeWorldSpacePosition(uv, nearDepth, UNITY_MATRIX_I_VP);
                 float3 rayOrigin = unity_OrthoParams.w > 0.5 ? nearWS : _WorldSpaceCameraPos;
-                float3 ray = endWS - rayOrigin;
-                float sceneDistance = length(ray);
-                float rayLength = max(0.0, min(sceneDistance, _RetroVolumeParams0.y) - _RetroVolumeParams3.x);
-                float3 rayDirection = ray / max(sceneDistance, 1e-4);
+                float sceneDistance = length(endWS - rayOrigin);
+                // The far-plane point gives a valid direction even for depths at the near plane.
+                float3 rayDirection = SafeNormalize(ComputeWorldSpacePosition(uv, UNITY_RAW_FAR_CLIP_VALUE, UNITY_MATRIX_I_VP) - rayOrigin);
+                if (!isfinite(sceneDistance) || any(!isfinite(rayDirection)))
+                    return half4(0.0, 0.0, 0.0, 1.0);
+                // Sky and geometry beyond Max Distance integrate the same segment; the bias only
+                // pulls the end of the ray off real geometry.
+                float rayLength = min(max(sceneDistance - (opaque ? _RetroVolumeParams3.x : 0.0), 0.0), _RetroVolumeParams0.y);
                 int steps = max(1, (int)_RetroVolumeParams2.x);
                 float stepLength = rayLength / steps;
                 float jitter = _RetroVolumeParams2.z > 0.0
@@ -342,7 +354,8 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                 bool stylizedSun = _RetroDirectionalVolumeStyle.x > 0.5;
                 float sunIntegral = 0.0;
                 float atmosphereIntegral = 0.0;
-                float phase = PhaseHG(dot(-rayDirection, SafeNormalize(_RetroPSXMainLightDirection.xyz)), _RetroVolumeParams1.z);
+                // The global direction points toward the light; positive anisotropy peaks looking into it.
+                float phase = PhaseHG(dot(rayDirection, SafeNormalize(_RetroPSXMainLightDirection.xyz)), _RetroVolumeParams1.z);
                 float3 positionWS = rayOrigin + rayDirection * (stepLength * (0.5 + jitter));
                 float transmittance = 1.0;
                 float3 scattering = 0.0;
@@ -361,14 +374,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                     float3 incoming = _RetroVolumeAmbient.rgb;
                     if (_RetroVolumeParams1.w > 1e-4)
                     {
-                        #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
-                            // Screen-space shadows store only the opaque surface's visibility.
-                            float mainShadow = stylizedSun
-                                ? SampleRetroPSXMainLightAtlas(positionWS, _RetroDirectionalVolumeStyle.w)
-                                : SampleRetroPSXMainLightShadow(positionWS);
-                        #else
-                            float mainShadow = SampleRetroPSXMainLightShadow(positionWS);
-                        #endif
+                        float mainShadow = SampleRetroPSXMainLightVolumeShadow(positionWS, _RetroDirectionalVolumeStyle.w);
                         if (stylizedSun)
                         {
                             atmosphereIntegral += sampleWeight;
@@ -425,12 +431,15 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                 }
                 if (stylizedSun && atmosphereIntegral > 1e-5)
                 {
-                    // Space bands closer together at low visibility to retain narrow shafts.
-                    float visibility = sqrt(saturate(sunIntegral / atmosphereIntegral));
+                    // Contrast shapes the integrated sun visibility (1 = physical) before quantization,
+                    // so bands stay evenly spaced. Bands are spaced perceptually to retain narrow beams.
+                    float visibility = pow(saturate(sunIntegral / atmosphereIntegral), _RetroDirectionalVolumeStyle.y);
                     float bands = _RetroVolumeParams2.y;
                     if (bands > 1.0)
-                        visibility = round(visibility * bands + dither * _RetroDirectionalVolumeStyle.z) / bands;
-                    visibility = pow(abs(visibility), _RetroDirectionalVolumeStyle.y);
+                    {
+                        visibility = saturate(round(sqrt(visibility) * bands + dither * _RetroDirectionalVolumeStyle.z) / bands);
+                        visibility *= visibility;
+                    }
                     float angularWeight = 2.0 * phase / (phase + rcp(12.56637));
                     scattering += _RetroPSXMainLightColor.rgb * _RetroDirectionalVolumeTint.rgb
                         * (visibility * atmosphereIntegral * angularWeight * _RetroVolumeParams1.w * _RetroVolumeParams1.y);
@@ -453,7 +462,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                     float visibility = visibilityWeight > 1e-5 ? visibilitySum / visibilityWeight : 0.0;
                     return half4(visibility.xxx, 1.0);
                 }
-                return half4(scattering, transmittance);
+                return all(isfinite(scattering)) ? half4(max(scattering, 0.0), transmittance) : half4(0.0, 0.0, 0.0, 1.0);
             }
             ENDHLSL
         }

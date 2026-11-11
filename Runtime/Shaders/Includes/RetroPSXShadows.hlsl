@@ -7,7 +7,6 @@
 #define RETROPSX_MAX_SHADOW_CASCADES 4
 #define RETROPSX_BEYOND_SHADOW_FAR(shadowCoord) shadowCoord.z <= 0.0 || shadowCoord.z >= 1.0
 
-TEXTURE2D_X(_ScreenSpaceShadowmapTexture);
 TEXTURE2D_SHADOW(_MainLightShadowmapTexture);
 TEXTURE2D_SHADOW(_AdditionalLightsShadowmapTexture);
 SAMPLER_CMP(sampler_LinearClampCompare);
@@ -142,62 +141,25 @@ half RetroPSXComputeCascadeIndex(float3 positionWS)
     return half(4.0) - dot(weights, half4(4.0, 3.0, 2.0, 1.0));
 }
 
-float4 TransformWorldToRetroPSXShadowCoord(float3 positionWS)
+// Participating media always samples the shadow atlas: the screen-space shadow texture only stores
+// the opaque surface's visibility. Media past the last cascade, or past the shadow distance fade, is
+// lit exactly like URP surfaces there, instead of reading URP's out-of-range no-op cascade matrix.
+half SampleRetroPSXMainLightVolumeShadow(float3 positionWS, float cascadeCount)
 {
-#if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
-    return float4(ComputeNormalizedDeviceCoordinatesWithZ(positionWS, GetWorldToHClipMatrix()), 1.0);
-#else
-    #if defined(_MAIN_LIGHT_SHADOWS_CASCADE)
-        half cascadeIndex = RetroPSXComputeCascadeIndex(positionWS);
-    #else
-        half cascadeIndex = half(0.0);
-    #endif
-    return float4(mul(_MainLightWorldToShadow[cascadeIndex], float4(positionWS, 1.0)).xyz, 0.0);
-#endif
-}
-
-half SampleRetroPSXScreenSpaceShadow(float4 shadowCoord)
-{
-    float safeW = shadowCoord.w >= 0.0 ? max(shadowCoord.w, 1e-5) : min(shadowCoord.w, -1e-5);
-    shadowCoord.xy /= safeW;
-    shadowCoord.xy = UnityStereoTransformScreenSpaceTex(shadowCoord.xy);
-#if defined(UNITY_PRETRANSFORM_TO_DISPLAY_ORIENTATION)
-    shadowCoord.xy = RemovePretransformRotation(shadowCoord.xy);
-#endif
-#if defined(UNITY_STEREO_INSTANCING_ENABLED) || defined(UNITY_STEREO_MULTIVIEW_ENABLED)
-    return SAMPLE_TEXTURE2D_ARRAY(_ScreenSpaceShadowmapTexture, sampler_PointClamp, shadowCoord.xy, unity_StereoEyeIndex).x;
-#else
-    return half(SAMPLE_TEXTURE2D(_ScreenSpaceShadowmapTexture, sampler_PointClamp, shadowCoord.xy).x);
-#endif
-}
-
-#if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
-half SampleRetroPSXMainLightAtlas(float3 positionWS, float cascadeCount)
-{
+#if defined(_MAIN_LIGHT_SHADOWS) || defined(_MAIN_LIGHT_SHADOWS_CASCADE) || defined(_MAIN_LIGHT_SHADOWS_SCREEN)
     if (cascadeCount < 1.0) return 1.0;
     int cascade = cascadeCount > 1.0 ? (int)RetroPSXComputeCascadeIndex(positionWS) : 0;
+    if (cascade >= (int)cascadeCount) return 1.0;
+    float3 fromCamera = positionWS - _WorldSpaceCameraPos;
+    half fade = (half)saturate(dot(fromCamera, fromCamera) * _MainLightShadowParams.z + _MainLightShadowParams.w);
+    if (fade >= 1.0) return 1.0;
     float4 shadowCoord = mul(_MainLightWorldToShadow[cascade], float4(positionWS, 1.0));
-    return SampleRetroPSXShadowmap(
+    half shadow = SampleRetroPSXShadowmap(
         TEXTURE2D_SHADOW_ARGS(_MainLightShadowmapTexture, sampler_LinearClampCompare),
         shadowCoord,
         GetRetroPSXMainLightShadowSamplingData(),
         half(_MainLightShadowParams.x));
-}
-#endif
-
-half SampleRetroPSXMainLightShadow(float3 positionWS)
-{
-#if defined(_MAIN_LIGHT_SHADOWS) || defined(_MAIN_LIGHT_SHADOWS_CASCADE) || defined(_MAIN_LIGHT_SHADOWS_SCREEN)
-    float4 shadowCoord = TransformWorldToRetroPSXShadowCoord(positionWS);
-    #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
-        return SampleRetroPSXScreenSpaceShadow(shadowCoord);
-    #else
-        return SampleRetroPSXShadowmap(
-            TEXTURE2D_SHADOW_ARGS(_MainLightShadowmapTexture, sampler_LinearClampCompare),
-            shadowCoord,
-            GetRetroPSXMainLightShadowSamplingData(),
-            half(_MainLightShadowParams.x));
-    #endif
+    return lerp(shadow, half(1.0), fade * fade);
 #else
     return 1.0;
 #endif
