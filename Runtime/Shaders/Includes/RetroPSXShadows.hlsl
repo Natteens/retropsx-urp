@@ -171,6 +171,20 @@ half SampleRetroPSXScreenSpaceShadow(float4 shadowCoord)
 #endif
 }
 
+#if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
+half SampleRetroPSXMainLightAtlas(float3 positionWS, float cascadeCount)
+{
+    if (cascadeCount < 1.0) return 1.0;
+    int cascade = cascadeCount > 1.0 ? (int)RetroPSXComputeCascadeIndex(positionWS) : 0;
+    float4 shadowCoord = mul(_MainLightWorldToShadow[cascade], float4(positionWS, 1.0));
+    return SampleRetroPSXShadowmap(
+        TEXTURE2D_SHADOW_ARGS(_MainLightShadowmapTexture, sampler_LinearClampCompare),
+        shadowCoord,
+        GetRetroPSXMainLightShadowSamplingData(),
+        half(_MainLightShadowParams.x));
+}
+#endif
+
 half SampleRetroPSXMainLightShadow(float3 positionWS)
 {
 #if defined(_MAIN_LIGHT_SHADOWS) || defined(_MAIN_LIGHT_SHADOWS_CASCADE) || defined(_MAIN_LIGHT_SHADOWS_SCREEN)

@@ -83,27 +83,39 @@ Shader "Hidden/RetroPSX/VolumetricComposite"
                         nearestIndex = index;
                     }
                 }
-                half4 referenceVolume = samples[nearestIndex];
-                float referenceLuminance = ScatteringLuminance(referenceVolume.rgb);
-                half4 volume = 0;
-                float weightSum = 0.0;
-                [unroll]
-                for (int index = 0; index < 9; index++)
+                half4 volume;
+                if (_RetroVolumeParams3.w > 0.5)
                 {
-                    half4 sampleVolume = samples[index];
-                    float sampleLuminance = ScatteringLuminance(sampleVolume.rgb);
-                    float relativeScatteringDelta = abs(sampleLuminance - referenceLuminance)
-                        / max(max(sampleLuminance, referenceLuminance), 0.02);
-                    float transmittanceDelta = abs(sampleVolume.a - referenceVolume.a);
-                    float depthWeight = exp(-depthDeltas[index] * _RetroVolumeParams3.y * 8.0);
-                    float visibilityEdgeWeight = exp(-relativeScatteringDelta * 8.0 - transmittanceDelta * 12.0);
-                    float weight = depthWeight * visibilityEdgeWeight;
-                    volume += sampleVolume * weight;
-                    weightSum += weight;
+                    // Retain the current block across shallow depth gradients. At silhouettes, use
+                    // a neighboring texel only if it sampled a surface at a comparable depth.
+                    float depthTolerance = 0.04;
+                    int index = depthDeltas[4] <= depthTolerance ? 4 : nearestIndex;
+                    volume = depthDeltas[index] <= depthTolerance ? samples[index] : half4(0.0, 0.0, 0.0, 1.0);
                 }
-                // A thin surface may have no corresponding low-res sample. Never
-                // substitute unrelated background scattering for that surface.
-                volume = weightSum > 1e-4 ? volume / weightSum : half4(0.0, 0.0, 0.0, 1.0);
+                else
+                {
+                    half4 referenceVolume = samples[nearestIndex];
+                    float referenceLuminance = ScatteringLuminance(referenceVolume.rgb);
+                    volume = 0;
+                    float weightSum = 0.0;
+                    [unroll]
+                    for (int index = 0; index < 9; index++)
+                    {
+                        half4 sampleVolume = samples[index];
+                        float sampleLuminance = ScatteringLuminance(sampleVolume.rgb);
+                        float relativeScatteringDelta = abs(sampleLuminance - referenceLuminance)
+                            / max(max(sampleLuminance, referenceLuminance), 0.02);
+                        float transmittanceDelta = abs(sampleVolume.a - referenceVolume.a);
+                        float depthWeight = exp(-depthDeltas[index] * _RetroVolumeParams3.y * 8.0);
+                        float visibilityEdgeWeight = exp(-relativeScatteringDelta * 8.0 - transmittanceDelta * 12.0);
+                        float weight = depthWeight * visibilityEdgeWeight;
+                        volume += sampleVolume * weight;
+                        weightSum += weight;
+                    }
+                    // A thin surface may have no corresponding low-res sample. Never
+                    // substitute unrelated background scattering for that surface.
+                    volume = weightSum > 1e-4 ? volume / weightSum : half4(0.0, 0.0, 0.0, 1.0);
+                }
                 if (_RetroPSXDebugMode == 7)
                     return half4(volume.rgb, _RetroPreserveAlpha > 0.5 ? baseColor.a : 1.0);
                 if (_RetroPSXDebugMode == 10)

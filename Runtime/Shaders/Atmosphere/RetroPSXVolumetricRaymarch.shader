@@ -24,6 +24,8 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
             float4 _RetroVolumeParams1;
             float4 _RetroVolumeParams2;
             float4 _RetroVolumeParams3;
+            float4 _RetroDirectionalVolumeStyle;
+            half4 _RetroDirectionalVolumeTint;
             half4 _RetroVolumeAmbient;
             float4 _RetroPSXMainLightDirection;
             half4 _RetroPSXMainLightColor;
@@ -37,6 +39,9 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
             float4 _RetroLocalPatternExtra[4];
             float4 _RetroLocalLightStylization[4];
             float4 _RetroLocalShaftShape[4];
+            float4 _RetroShaftSourceTint[4];
+            float4 _RetroShaftEndTint[4];
+            float4 _RetroShaftRight[4];
             TEXTURE2D(_RetroPattern0); SAMPLER(sampler_RetroPattern0);
             TEXTURE2D(_RetroPattern1); SAMPLER(sampler_RetroPattern1);
             TEXTURE2D(_RetroPattern2); SAMPLER(sampler_RetroPattern2);
@@ -201,6 +206,19 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                 return true;
             }
 
+            bool ClipShaftPlane(float3 origin, float3 ray, float3 plane, inout float entry, inout float exit)
+            {
+                float height = dot(origin, plane);
+                float slope = dot(ray, plane);
+                float atEntry = height + entry * slope;
+                float atExit = height + exit * slope;
+                if (atEntry <= 0.0 && atExit <= 0.0) return true;
+                if (atEntry >= 0.0 && atExit >= 0.0) return false;
+                if (atEntry > 0.0) entry = -height / slope;
+                else exit = -height / slope;
+                return exit > entry;
+            }
+
             float3 MarchShaft(int index, float3 rayOrigin, float3 ray, float nearDistance, float farDistance,
                 float fogDistance, float fogTransmittance, int steps, float dither,
                 inout float visibilitySum, inout float visibilityWeight)
@@ -217,13 +235,33 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                 float4 cone = _RetroLocalLightDirAngle[index];
                 float entry = nearDistance / source.w;
                 float exit = farDistance / source.w;
-                if (!ClipShaft((rayOrigin - source.xyz) / source.w, ray, cone, entry, exit))
+                float3 localOrigin = (rayOrigin - source.xyz) / source.w;
+                if (!ClipShaft(localOrigin, ray, cone, entry, exit))
                     return 0.0;
+
+                float tangent = sqrt(max(0.0, 1.0 - cone.w * cone.w)) / max(cone.w, 1e-4);
+                float4 facet = _RetroShaftRight[index];
+                float3 up = cross(cone.xyz, facet.xyz);
+                float apothem = lerp(1.0, 0.70710678, facet.w);
+                if (facet.w > 0.0)
+                {
+                    // At full faceting the four planes form a square inscribed in the original cone.
+                    float3 inset = tangent * apothem * cone.xyz;
+                    if (!ClipShaftPlane(localOrigin, ray,  facet.xyz - inset, entry, exit) ||
+                        !ClipShaftPlane(localOrigin, ray, -facet.xyz - inset, entry, exit) ||
+                        !ClipShaftPlane(localOrigin, ray,  up - inset, entry, exit) ||
+                        !ClipShaftPlane(localOrigin, ray, -up - inset, entry, exit))
+                        return 0.0;
+                }
 
                 half4 shadowParams = LocalShadowParams(index);
                 if (shadowParams.w >= -1.5 && shadowParams.w < 0.0) return 0.0;
                 float4 shape = _RetroLocalShaftShape[index];
-                float tangent = sqrt(max(0.0, 1.0 - cone.w * cone.w)) / max(cone.w, 1e-4);
+                float4 sourceTint = _RetroShaftSourceTint[index];
+                float3 endTint = _RetroShaftEndTint[index].rgb;
+                bool rangeRelative = sourceTint.w > 0.5;
+                // One optical depth per light range at unit density; older shafts retain their per-meter density.
+                float extinction = lightColor.w * (rangeRelative ? rcp(source.w) : 0.045);
                 float stepLength = (exit - entry) * source.w / steps;
                 float distanceAlongRay = entry * source.w + 0.5 * stepLength;
                 float bandCount = _RetroVolumeParams2.y;
@@ -234,7 +272,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                 // Approximate fog optical depth along the shaft using the existing atmosphere integral.
                 float fogRate = -log(max(fogTransmittance, 1e-5)) / max(fogDistance, 1e-4);
                 float throughput = 1.0;
-                float integral = 0.0;
+                float3 integral = 0.0;
 
                 [loop]
                 for (int sampleIndex = 0; sampleIndex < steps; sampleIndex++, distanceAlongRay += stepLength)
@@ -243,10 +281,16 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                     float3 relative = positionWS - source.xyz;
                     float distance01 = saturate(length(relative) / source.w);
                     float axial = dot(relative, cone.xyz);
-                    float radial = saturate(length(relative - axial * cone.xyz) / max(axial * tangent, 1e-6));
+                    float axial01 = saturate(axial / source.w);
+                    float radius = max(axial * tangent, 1e-6);
+                    float radial = length(relative - axial * cone.xyz) / radius;
+                    if (facet.w > 0.0)
+                        radial = max(radial, max(abs(dot(relative, facet.xyz)), abs(dot(relative, up))) / (radius * apothem));
+                    radial = saturate(radial);
                     float edge = 1.0 - smoothstep(1.0 - _RetroLocalLightParams[index].y, 1.0, radial);
-                    float falloff = pow(1.0 - distance01, sharpness);
-                    if (shape.y > 0.0) falloff *= smoothstep(0.0, shape.y, distance01);
+                    float falloffPosition = rangeRelative ? axial01 : distance01;
+                    float falloff = sharpness > 0.0 ? pow(abs(1.0 - falloffPosition), sharpness) : 1.0;
+                    if (shape.y > 0.0) falloff *= smoothstep(0.0, shape.y, falloffPosition);
                     if (shape.z > 0.0) falloff *= smoothstep(0.0, shape.z, 1.0 - distance01);
                     float attenuation = edge * falloff * (1.0 - radial * shape.x);
                     if (bandCount > 1.0)
@@ -254,7 +298,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                     if (attenuation <= 1e-4) continue;
 
                     attenuation *= lerp(1.0, Pattern(index, positionWS, relative, source.w, cone.xyz), patternStrength);
-                    float opacity = 1.0 - exp(-0.045 * lightColor.w * attenuation * stepLength);
+                    float opacity = 1.0 - exp(-extinction * attenuation * stepLength);
                     float weight = throughput * opacity;
                     float visibility = LocalShadow(positionWS, relative, shadowParams);
                     if (debugLight)
@@ -262,7 +306,8 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                         visibilitySum += visibility * weight;
                         visibilityWeight += weight;
                     }
-                    integral += weight * visibility * exp(-fogRate * min(distanceAlongRay, fogDistance));
+                    integral += lerp(sourceTint.rgb, endTint, axial01)
+                        * (weight * visibility * exp(-fogRate * min(distanceAlongRay, fogDistance)));
                     throughput *= 1.0 - opacity;
                     if (throughput < 0.01) break;
                 }
@@ -291,7 +336,13 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                 float3 rayDirection = ray / max(sceneDistance, 1e-4);
                 int steps = max(1, (int)_RetroVolumeParams2.x);
                 float stepLength = rayLength / steps;
-                float jitter = (Hash12(input.positionCS.xy) - 0.5) * _RetroVolumeParams2.z;
+                float jitter = _RetroVolumeParams2.z > 0.0
+                    ? (Hash12(input.positionCS.xy) - 0.5) * _RetroVolumeParams2.z : 0.0;
+                float dither = RetroPSX_DitherValue(3, int2(input.positionCS.xy)) * 31.0;
+                bool stylizedSun = _RetroDirectionalVolumeStyle.x > 0.5;
+                float sunIntegral = 0.0;
+                float atmosphereIntegral = 0.0;
+                float phase = PhaseHG(dot(-rayDirection, SafeNormalize(_RetroPSXMainLightDirection.xyz)), _RetroVolumeParams1.z);
                 float3 positionWS = rayOrigin + rayDirection * (stepLength * (0.5 + jitter));
                 float transmittance = 1.0;
                 float3 scattering = 0.0;
@@ -306,12 +357,25 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                         densityShape = round(densityShape * _RetroVolumeParams2.w) / _RetroVolumeParams2.w;
                     float density = _RetroVolumeParams0.x * densityShape;
 
-                    float phase = PhaseHG(dot(-rayDirection, normalize(_RetroPSXMainLightDirection.xyz)), _RetroVolumeParams1.z);
+                    float sampleWeight = transmittance * density * stepLength;
                     float3 incoming = _RetroVolumeAmbient.rgb;
                     if (_RetroVolumeParams1.w > 1e-4)
                     {
-                        float mainShadow = SampleRetroPSXMainLightShadow(positionWS);
-                        incoming += _RetroPSXMainLightColor.rgb * phase * _RetroVolumeParams1.w * mainShadow;
+                        #if defined(_MAIN_LIGHT_SHADOWS_SCREEN)
+                            // Screen-space shadows store only the opaque surface's visibility.
+                            float mainShadow = stylizedSun
+                                ? SampleRetroPSXMainLightAtlas(positionWS, _RetroDirectionalVolumeStyle.w)
+                                : SampleRetroPSXMainLightShadow(positionWS);
+                        #else
+                            float mainShadow = SampleRetroPSXMainLightShadow(positionWS);
+                        #endif
+                        if (stylizedSun)
+                        {
+                            atmosphereIntegral += sampleWeight;
+                            sunIntegral += sampleWeight * mainShadow;
+                        }
+                        else
+                            incoming += _RetroPSXMainLightColor.rgb * phase * _RetroVolumeParams1.w * mainShadow;
                     }
 
                     [loop]
@@ -342,9 +406,9 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                         float shadowVisibility = LocalShadow(positionWS, relative, LocalShadowParams(lightIndex));
                         if (_RetroPSXDebugMode == 10 && lightIndex == (int)round(_RetroVolumeParams3.z))
                         {
-                            float sampleWeight = attenuation * density * stepLength;
-                            visibilitySum += shadowVisibility * sampleWeight;
-                            visibilityWeight += sampleWeight;
+                            float debugWeight = attenuation * density * stepLength;
+                            visibilitySum += shadowVisibility * debugWeight;
+                            visibilityWeight += debugWeight;
                         }
                         if (shadowVisibility <= 1e-4)
                             continue;
@@ -354,16 +418,28 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                         incoming += _RetroLocalLightColorDensity[lightIndex].rgb * attenuation * _RetroLocalLightColorDensity[lightIndex].w;
                     }
 
-                    scattering += transmittance * incoming * density * _RetroVolumeParams1.y * stepLength;
+                    scattering += incoming * sampleWeight * _RetroVolumeParams1.y;
                     transmittance *= exp(-density * _RetroVolumeParams1.x * stepLength);
                     if (transmittance < 0.01) break;
                     positionWS += rayDirection * stepLength;
                 }
+                if (stylizedSun && atmosphereIntegral > 1e-5)
+                {
+                    // Space bands closer together at low visibility to retain narrow shafts.
+                    float visibility = sqrt(saturate(sunIntegral / atmosphereIntegral));
+                    float bands = _RetroVolumeParams2.y;
+                    if (bands > 1.0)
+                        visibility = round(visibility * bands + dither * _RetroDirectionalVolumeStyle.z) / bands;
+                    visibility = pow(abs(visibility), _RetroDirectionalVolumeStyle.y);
+                    float angularWeight = 2.0 * phase / (phase + rcp(12.56637));
+                    scattering += _RetroPSXMainLightColor.rgb * _RetroDirectionalVolumeTint.rgb
+                        * (visibility * atmosphereIntegral * angularWeight * _RetroVolumeParams1.w * _RetroVolumeParams1.y);
+                }
+
                 float nearDistance = length(nearWS - rayOrigin);
                 float farDistance = sceneDistance - (opaque ? _RetroVolumeParams3.x : 0.0);
                 if (farDistance > nearDistance)
                 {
-                    float dither = RetroPSX_DitherValue(3, int2(input.positionCS.xy)) * 31.0;
                     [loop]
                     for (int index = 0; index < _RetroLocalLightCount; index++)
                     {

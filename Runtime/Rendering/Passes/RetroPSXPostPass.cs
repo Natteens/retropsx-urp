@@ -22,6 +22,9 @@ namespace RetroPSX.Rendering
         private readonly Vector4[] patternTransform = new Vector4[MaximumLocalLights];
         private readonly Vector4[] patternParams = new Vector4[MaximumLocalLights];
         private readonly Vector4[] patternExtra = new Vector4[MaximumLocalLights];
+        private readonly Vector4[] shaftSourceTint = new Vector4[MaximumLocalLights];
+        private readonly Vector4[] shaftEndTint = new Vector4[MaximumLocalLights];
+        private readonly Vector4[] shaftRight = new Vector4[MaximumLocalLights];
         private readonly Vector4[] shaftShape = new Vector4[MaximumLocalLights];
         private readonly Vector4[] lightStylization = new Vector4[MaximumLocalLights];
 
@@ -55,6 +58,7 @@ namespace RetroPSX.Rendering
             UniversalResourceData resources = frameData.Get<UniversalResourceData>();
             UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
             UniversalLightData lightData = frameData.Get<UniversalLightData>();
+            int shadowCascades = frameData.Get<UniversalShadowData>().mainLightShadowCascadesCount;
             if (resources.isActiveTargetBackBuffer || !resources.activeColorTexture.IsValid())
                 return;
 
@@ -79,7 +83,7 @@ namespace RetroPSX.Rendering
             {
                 if (useVolumetrics)
                     resources.cameraColor = AddVolumetrics(renderGraph, cameraData, lightData, raster, lowDesc, source, depth,
-                        resources.mainShadowsTexture, resources.additionalShadowsTexture, false, preserveAlpha);
+                        resources.mainShadowsTexture, resources.additionalShadowsTexture, shadowCascades, false, preserveAlpha);
                 return;
             }
 
@@ -91,7 +95,7 @@ namespace RetroPSX.Rendering
             TextureHandle lowFinal = canonical;
             if (useVolumetrics)
                 lowFinal = AddVolumetrics(renderGraph, cameraData, lightData, raster, lowDesc, canonical, depth,
-                    resources.mainShadowsTexture, resources.additionalShadowsTexture, true, preserveAlpha);
+                    resources.mainShadowsTexture, resources.additionalShadowsTexture, shadowCascades, true, preserveAlpha);
 
             TextureDesc outputDesc = sourceDesc;
             outputDesc.name = "RetroPSX.PresentedColor";
@@ -150,6 +154,7 @@ namespace RetroPSX.Rendering
             TextureHandle depth,
             TextureHandle mainShadows,
             TextureHandle additionalShadows,
+            int shadowCascades,
             bool applyFinalColor,
             bool preserveOutputAlpha)
         {
@@ -164,7 +169,7 @@ namespace RetroPSX.Rendering
             volumeDesc.filterMode = FilterMode.Point;
             TextureHandle volume = renderGraph.CreateTexture(volumeDesc);
 
-            ConfigureVolumetricMaterial(cameraData.camera, steps, lightData);
+            ConfigureVolumetricMaterial(cameraData.camera, steps, lightData, mainShadows.IsValid() ? shadowCascades : 0);
             AddBlit(renderGraph, "RetroPSX / Volumetric Raymarch", depth, volume, volumetricMaterial, 0, depth,
                 mainShadows, additionalShadows, true, RetroPSXShaderIDs.VolumeTexture);
 
@@ -174,7 +179,7 @@ namespace RetroPSX.Rendering
             volumetricCompositeMaterial.SetVector(RetroPSXShaderIDs.VolumeTexelSize, new Vector4(
                 1f / volumeDesc.width, 1f / volumeDesc.height, volumeDesc.width, volumeDesc.height));
             volumetricCompositeMaterial.SetVector(RetroPSXShaderIDs.VolumeParams3, new Vector4(
-                profile.Volumetrics.GeometryDepthBias, profile.Volumetrics.DepthEdgeSharpness, 0f, 0f));
+                profile.Volumetrics.GeometryDepthBias, profile.Volumetrics.DepthEdgeSharpness, 0f, profile.Volumetrics.Pixelated ? 1f : 0f));
             RetroColorProfile color = profile.Color;
             volumetricCompositeMaterial.SetVector(RetroPSXShaderIDs.FinalColorParams, new Vector4(
                 applyFinalColor && color.QuantizeFinalImage ? 1f : 0f,
@@ -189,13 +194,19 @@ namespace RetroPSX.Rendering
             return composite;
         }
 
-        private void ConfigureVolumetricMaterial(Camera camera, int steps, UniversalLightData lightData)
+        private void ConfigureVolumetricMaterial(Camera camera, int steps, UniversalLightData lightData, int shadowCascades)
         {
             RetroVolumetricProfile volume = profile.Volumetrics;
             volumetricMaterial.SetVector(RetroPSXShaderIDs.VolumeParams0, new Vector4(volume.Density, volume.MaxDistance, volume.BaseHeight, volume.HeightFalloff));
             volumetricMaterial.SetVector(RetroPSXShaderIDs.VolumeParams1, new Vector4(volume.Extinction, volume.Scattering, volume.Anisotropy, volume.DirectionalContribution));
+            bool stylizedSun = volume.StylizedDirectional && volume.Density > 0f && volume.DirectionalContribution > 0f
+                && lightData.mainLightIndex >= 0 && lightData.visibleLights[lightData.mainLightIndex].lightType == LightType.Directional;
+            float jitter = volume.Jitter && !volume.Pixelated && !stylizedSun ? volume.JitterStrength : 0f;
             volumetricMaterial.SetVector(RetroPSXShaderIDs.VolumeParams2, new Vector4(
-                steps, volume.LightSteps, volume.Jitter ? volume.JitterStrength : 0f, volume.DensitySteps));
+                steps, volume.LightSteps, jitter, volume.DensitySteps));
+            volumetricMaterial.SetVector(RetroPSXShaderIDs.DirectionalVolumeStyle, new Vector4(
+                stylizedSun ? 1f : 0f, volume.DirectionalContrast, volume.DirectionalDither, shadowCascades));
+            volumetricMaterial.SetColor(RetroPSXShaderIDs.DirectionalVolumeTint, volume.DirectionalTint);
             volumetricMaterial.SetVector(RetroPSXShaderIDs.VolumeParams3, new Vector4(
                 volume.GeometryDepthBias, volume.DepthEdgeSharpness, profile.Debug.VolumetricLightIndex, 0f));
             volumetricMaterial.SetColor(RetroPSXShaderIDs.VolumeAmbient, volume.Ambient.linear);
@@ -214,6 +225,9 @@ namespace RetroPSX.Rendering
             volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.LocalPatternExtra, patternExtra);
             volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.LocalLightStylization, lightStylization);
             volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.LocalShaftShape, shaftShape);
+            volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.ShaftSourceTint, shaftSourceTint);
+            volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.ShaftEndTint, shaftEndTint);
+            volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.ShaftRight, shaftRight);
         }
 
         private void PackLight(int index, RetroVolumetricLight volume, UniversalLightData lightData)
@@ -245,7 +259,16 @@ namespace RetroPSX.Rendering
             bool shaft = volume.IsStylizedShaft;
             bool usesShadows = volume.UsesLightShadows && (!shaft || light.shadows != LightShadows.None);
             int shadowIndex = usesShadows ? FindAdditionalLightIndex(light, lightData) : -1;
-            shaftShape[index] = volume.ShaftShape;
+            if (shaft)
+            {
+                shaftShape[index] = volume.ShaftShape;
+                Vector3 right = transform.right;
+                shaftRight[index] = new Vector4(right.x, right.y, right.z, volume.Faceting);
+                Color sourceTint = volume.SourceTint;
+                Color endTint = volume.EndTint;
+                shaftSourceTint[index] = new Vector4(sourceTint.r, sourceTint.g, sourceTint.b, volume.RangeRelativeDensity ? 1f : 0f);
+                shaftEndTint[index] = endTint;
+            }
             // The shadow index is only meaningful while URP has included the light for this
             // camera.  The shader also checks that an atlas slice was allocated: a missing
             // slice must never silently turn into unshadowed direct volumetric lighting.

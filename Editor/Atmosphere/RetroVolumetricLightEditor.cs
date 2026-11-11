@@ -11,10 +11,17 @@ namespace RetroPSX.Editor
             serializedObject.Update();
             var shaft = serializedObject.FindProperty("stylizedShaft");
             bool isSpot = ((RetroVolumetricLight)target).Light?.type == LightType.Spot;
-            if (!isSpot)
-                DrawPropertiesExcluding(serializedObject, "m_Script", "stylizedShaft", "radialFalloff", "sourceFade", "rangeFade", "bandDither");
-            else if (!shaft.boolValue)
-                DrawPropertiesExcluding(serializedObject, "m_Script", "radialFalloff", "sourceFade", "rangeFade", "bandDither");
+            if (!isSpot || !shaft.boolValue)
+            {
+                var hidden = new System.Collections.Generic.List<string>
+                {
+                    "m_Script", "radialFalloff", "sourceFade", "rangeFade", "faceting",
+                    "sourceTint", "endTint", "bandDither", "rangeRelativeDensity"
+                };
+                if (!isSpot)
+                    hidden.Add("stylizedShaft");
+                DrawPropertiesExcluding(serializedObject, hidden.ToArray());
+            }
             else
                 DrawPropertiesExcluding(serializedObject, "m_Script");
             serializedObject.ApplyModifiedProperties();

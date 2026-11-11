@@ -6,9 +6,16 @@ namespace RetroPSX
     public sealed class RetroVolumetricProfile : ScriptableObject
     {
         [SerializeField] private bool enabled;
+        [Header("Sampling")]
         [SerializeField] private RetroVolumetricQuality quality = RetroVolumetricQuality.Medium;
         [SerializeField, Range(1, 8)] private int resolutionDivisor = 2;
         [SerializeField, Range(4, 128)] private int raySteps = 28;
+        [SerializeField, Tooltip("Keeps the volumetric texels crisp. Resolution is set by Quality or the Custom divisor.")]
+        private bool pixelated;
+        [SerializeField, Tooltip("Offsets raymarch samples. Pixelated and stylized directional volumes use centered samples.")]
+        private bool jitter = true;
+        [SerializeField, Range(0f, 1f)] private float jitterStrength = 0.65f;
+        [Header("Atmosphere")]
         [SerializeField, Min(0.01f)] private float maxDistance = 40f;
         [SerializeField, Range(0f, 2f)] private float density = 0.045f;
         [SerializeField] private float baseHeight;
@@ -17,12 +24,21 @@ namespace RetroPSX
         [SerializeField, Range(0f, 4f)] private float scattering = 1f;
         [SerializeField, Range(-0.8f, 0.8f)] private float anisotropy = 0.15f;
         [SerializeField] private Color ambient = new(0.08f, 0.09f, 0.12f, 1f);
+        [Header("Directional Light")]
         [SerializeField, Range(0f, 1f)] private float directionalContribution = 0.75f;
-        [SerializeField] private bool jitter = true;
-        [SerializeField, Range(0f, 1f)] private float jitterStrength = 0.65f;
+        [SerializeField, Tooltip("Styles the main directional light's scattering through shadowed atmosphere.")]
+        private bool stylizedDirectional;
+        [SerializeField, Tooltip("Multiplies the main directional light color.")]
+        private Color directionalTint = Color.white;
+        [SerializeField, Range(0.5f, 4f), Tooltip("Shapes the contrast of the integrated sun beams.")]
+        private float directionalContrast = 1.5f;
+        [SerializeField, Range(0f, 1f), Tooltip("Ordered dithering of directional Light Steps.")]
+        private float directionalDither;
+        [Header("Retro Stylization")]
         [SerializeField, Range(0, 32)] private int densitySteps = 8;
-        [SerializeField, Range(0, 32), Tooltip("Quantizes local light attenuation into bands. Zero or one leaves it continuous.")]
+        [SerializeField, Range(0, 32), Tooltip("Quantizes local light and stylized directional scattering into bands. Zero or one leaves it continuous.")]
         private int lightSteps = 8;
+        [Header("Depth and Limits")]
         [SerializeField, Min(0f)] private float geometryDepthBias = 0.05f;
         [SerializeField, Range(0.25f, 16f)] private float depthEdgeSharpness = 4f;
         [SerializeField, Range(1, 4)] private int maximumLocalLights = 4;
@@ -38,6 +54,11 @@ namespace RetroPSX
         public float Anisotropy => anisotropy;
         public Color Ambient => ambient;
         public float DirectionalContribution => directionalContribution;
+        internal bool Pixelated => pixelated;
+        internal bool StylizedDirectional => stylizedDirectional;
+        internal float DirectionalContrast => directionalContrast;
+        internal float DirectionalDither => directionalDither;
+        internal Color DirectionalTint => directionalTint.linear;
         public bool Jitter => jitter;
         public float JitterStrength => jitterStrength;
         public int DensitySteps => densitySteps;
