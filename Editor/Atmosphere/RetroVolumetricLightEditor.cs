@@ -9,7 +9,14 @@ namespace RetroPSX.Editor
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
-            DrawPropertiesExcluding(serializedObject, "m_Script");
+            var shaft = serializedObject.FindProperty("stylizedShaft");
+            bool isSpot = ((RetroVolumetricLight)target).Light?.type == LightType.Spot;
+            if (!isSpot)
+                DrawPropertiesExcluding(serializedObject, "m_Script", "stylizedShaft", "radialFalloff", "sourceFade", "rangeFade", "bandDither");
+            else if (!shaft.boolValue)
+                DrawPropertiesExcluding(serializedObject, "m_Script", "radialFalloff", "sourceFade", "rangeFade", "bandDither");
+            else
+                DrawPropertiesExcluding(serializedObject, "m_Script");
             serializedObject.ApplyModifiedProperties();
 
             if (targets.Length != 1)

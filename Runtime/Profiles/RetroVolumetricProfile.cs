@@ -21,7 +21,8 @@ namespace RetroPSX
         [SerializeField] private bool jitter = true;
         [SerializeField, Range(0f, 1f)] private float jitterStrength = 0.65f;
         [SerializeField, Range(0, 32)] private int densitySteps = 8;
-        [SerializeField, Range(0, 32)] private int lightSteps = 8;
+        [SerializeField, Range(0, 32), Tooltip("Quantizes local light attenuation into bands. Zero or one leaves it continuous.")]
+        private int lightSteps = 8;
         [SerializeField, Min(0f)] private float geometryDepthBias = 0.05f;
         [SerializeField, Range(0.25f, 16f)] private float depthEdgeSharpness = 4f;
         [SerializeField, Range(1, 4)] private int maximumLocalLights = 4;

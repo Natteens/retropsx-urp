@@ -9,9 +9,21 @@ namespace RetroPSX
     {
         [SerializeField, Range(0f, 4f)] private float intensity = 1f;
         [SerializeField, Range(0f, 2f)] private float density = 1f;
-        [SerializeField, Range(0.001f, 1f)] private float edgeSoftness = 0.15f;
-        [SerializeField, Range(0.25f, 8f)] private float beamSharpness = 1f;
-        [SerializeField, Tooltip("Uses realtime shadows from the associated Unity Light. The Unity Light must have shadows enabled.")]
+        [SerializeField, Range(0.001f, 1f), Tooltip("Width of the edge transition. In Stylized Shaft mode this is a fraction of the cone radius.")]
+        private float edgeSoftness = 0.15f;
+        [SerializeField, Range(0.25f, 8f), Tooltip("How quickly the light falls off with distance from the source.")]
+        private float beamSharpness = 1f;
+        [SerializeField, Tooltip("For Spot Lights. Gives the cone its own scattering density, independent of the global atmosphere.")]
+        private bool stylizedShaft;
+        [SerializeField, Range(0f, 1f), Tooltip("How strongly the shaft concentrates light toward its centerline.")]
+        private float radialFalloff;
+        [SerializeField, Range(0f, 1f), Tooltip("Distance over which the shaft fades in, as a fraction of the light range.")]
+        private float sourceFade;
+        [SerializeField, Range(0f, 1f), Tooltip("Distance over which the shaft fades out, as a fraction of the light range.")]
+        private float rangeFade;
+        [SerializeField, Range(0f, 1f), Tooltip("Ordered dithering between the volumetric profile's Light Steps. Zero disables shaft dithering.")]
+        private float bandDither;
+        [SerializeField, Tooltip("Uses realtime shadows from the Unity Light. Legacy volumes require shadows to be enabled in this mode.")]
         private RetroVolumetricShadowMode volumetricShadows = RetroVolumetricShadowMode.UseLightShadows;
         [SerializeField, Range(0f, 2f)] private float noiseDistortion;
         [SerializeField] private RetroVolumetricPattern pattern;
@@ -36,9 +48,11 @@ namespace RetroPSX
         public float Density => density;
         public float EdgeSoftness => edgeSoftness;
         public float BeamSharpness => beamSharpness;
+        internal bool IsStylizedShaft => stylizedShaft && Light.type == LightType.Spot;
+        internal Vector4 ShaftShape => new(radialFalloff, sourceFade, rangeFade, bandDither);
         public RetroVolumetricShadowMode VolumetricShadows => volumetricShadows;
         public bool UsesLightShadows => volumetricShadows == RetroVolumetricShadowMode.UseLightShadows;
-        public bool RequiresRealtimeShadows => UsesLightShadows && (Light == null || Light.shadows == LightShadows.None);
+        public bool RequiresRealtimeShadows => UsesLightShadows && (Light == null || (!IsStylizedShaft && Light.shadows == LightShadows.None));
         public float NoiseDistortion => noiseDistortion;
         public float PatternStrength => patternStrength;
         public RetroVolumetricPattern Pattern
@@ -49,6 +63,9 @@ namespace RetroPSX
         public bool Blink => blink;
         public float BlinkRate => blinkRate;
         public float BlinkDuty => blinkDuty;
+
+        // Existing serialized lights retain atmosphere-driven scattering.
+        private void Reset() => stylizedShaft = true;
 
         private void OnEnable() => RetroVolumetricLightRegistry.Register(this);
         private void OnDisable() => RetroVolumetricLightRegistry.Unregister(this);

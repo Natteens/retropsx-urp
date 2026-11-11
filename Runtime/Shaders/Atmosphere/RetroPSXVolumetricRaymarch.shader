@@ -17,7 +17,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
-            #include "../Includes/RetroPSXCore.hlsl"
+            #include "../Includes/RetroPSXColor.hlsl"
             #include "../Includes/RetroPSXShadows.hlsl"
 
             float4 _RetroVolumeParams0;
@@ -36,6 +36,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
             float4 _RetroLocalPatternParams[4];
             float4 _RetroLocalPatternExtra[4];
             float4 _RetroLocalLightStylization[4];
+            float4 _RetroLocalShaftShape[4];
             TEXTURE2D(_RetroPattern0); SAMPLER(sampler_RetroPattern0);
             TEXTURE2D(_RetroPattern1); SAMPLER(sampler_RetroPattern1);
             TEXTURE2D(_RetroPattern2); SAMPLER(sampler_RetroPattern2);
@@ -115,26 +116,190 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                 return value;
             }
 
+            half4 LocalShadowParams(int lightIndex)
+            {
+                float4 style = _RetroLocalLightStylization[lightIndex];
+                if (style.w < 0.5)
+                    return half4(0.0, 0.0, 0.0, -2.0);
+                // A light requesting shadows without an atlas slice contributes no scattering.
+                return style.z >= 0.0 ? GetRetroPSXAdditionalLightShadowParams((int)style.z) : half4(0.0, 0.0, 0.0, -1.0);
+            }
+
+            float LocalShadow(float3 positionWS, float3 relative, half4 shadowParams)
+            {
+                if (shadowParams.w < -1.5) return 1.0;
+                if (shadowParams.w < 0.0) return 0.0;
+                return SampleRetroPSXAdditionalLightShadow(positionWS, SafeNormalize(-relative), shadowParams);
+            }
+
+            bool ClipShaft(float3 origin, float3 ray, float4 cone, inout float entry, inout float exit)
+            {
+                float sphereCenter = -dot(origin, ray);
+                float3 closest = origin + sphereCenter * ray;
+                float radiusSquared = 1.0 - dot(closest, closest);
+                if (radiusSquared <= 0.0) return false;
+
+                float radius = sqrt(radiusSquared);
+                entry = max(entry, sphereCenter - radius);
+                exit = min(exit, sphereCenter + radius);
+                if (exit <= entry) return false;
+
+                // Rebase within the range sphere before solving the double cone, then keep its forward lobe.
+                origin += entry * ray;
+                float interval = exit - entry;
+                float height = dot(origin, cone.xyz);
+                float slope = dot(ray, cone.xyz);
+                float lower = 0.0;
+                float upper = interval;
+                if (height < 0.0)
+                {
+                    if (height + slope * interval <= 0.0) return false;
+                    lower = -height / slope;
+                }
+                else if (height + slope * interval < 0.0)
+                    upper = -height / slope;
+
+                float cosineSquared = cone.w * cone.w;
+                float a = slope * slope - cosineSquared;
+                float b = height * slope - cosineSquared * dot(origin, ray);
+                float c = height * height - cosineSquared * dot(origin, origin);
+                float discriminant = b * b - a * c;
+                if (abs(a) < 1e-7)
+                {
+                    if (abs(b) > 1e-7)
+                    {
+                        float root = -c / (2.0 * b);
+                        if (height + slope * root >= 0.0)
+                        {
+                            if (b > 0.0) lower = max(lower, root);
+                            else upper = min(upper, root);
+                        }
+                    }
+                }
+                else if (discriminant > 0.0)
+                {
+                    float q = -b - (b >= 0.0 ? 1.0 : -1.0) * sqrt(discriminant);
+                    float first = q / a;
+                    float second = c / q;
+                    if (height + slope * first >= 0.0)
+                    {
+                        if (b >= 0.0) upper = min(upper, first);
+                        else lower = max(lower, first);
+                    }
+                    if (height + slope * second >= 0.0)
+                    {
+                        if (b >= 0.0) lower = max(lower, second);
+                        else upper = min(upper, second);
+                    }
+                }
+
+                if (upper <= lower) return false;
+                float3 midpoint = origin + (0.5 * (lower + upper)) * ray;
+                if (dot(midpoint, cone.xyz) < cone.w * length(midpoint)) return false;
+                exit = entry + upper;
+                entry += lower;
+                return true;
+            }
+
+            float3 MarchShaft(int index, float3 rayOrigin, float3 ray, float nearDistance, float farDistance,
+                float fogDistance, float fogTransmittance, int steps, float dither,
+                inout float visibilitySum, inout float visibilityWeight)
+            {
+                float4 source = _RetroLocalLightPosRange[index];
+                float4 lightColor = _RetroLocalLightColorDensity[index];
+                if (source.w <= 1e-4 || lightColor.w <= 0.0 || !any(lightColor.rgb > 0.0))
+                    return 0.0;
+
+                float4 patternExtra = _RetroLocalPatternExtra[index];
+                if (patternExtra.z > 0.0 && frac(_Time.y * patternExtra.z) > patternExtra.w)
+                    return 0.0;
+
+                float4 cone = _RetroLocalLightDirAngle[index];
+                float entry = nearDistance / source.w;
+                float exit = farDistance / source.w;
+                if (!ClipShaft((rayOrigin - source.xyz) / source.w, ray, cone, entry, exit))
+                    return 0.0;
+
+                half4 shadowParams = LocalShadowParams(index);
+                if (shadowParams.w >= -1.5 && shadowParams.w < 0.0) return 0.0;
+                float4 shape = _RetroLocalShaftShape[index];
+                float tangent = sqrt(max(0.0, 1.0 - cone.w * cone.w)) / max(cone.w, 1e-4);
+                float stepLength = (exit - entry) * source.w / steps;
+                float distanceAlongRay = entry * source.w + 0.5 * stepLength;
+                float bandCount = _RetroVolumeParams2.y;
+                float bandOffset = dither * shape.w;
+                float sharpness = _RetroLocalLightStylization[index].x;
+                float patternStrength = _RetroLocalLightStylization[index].y;
+                bool debugLight = _RetroPSXDebugMode == 10 && index == (int)round(_RetroVolumeParams3.z);
+                // Approximate fog optical depth along the shaft using the existing atmosphere integral.
+                float fogRate = -log(max(fogTransmittance, 1e-5)) / max(fogDistance, 1e-4);
+                float throughput = 1.0;
+                float integral = 0.0;
+
+                [loop]
+                for (int sampleIndex = 0; sampleIndex < steps; sampleIndex++, distanceAlongRay += stepLength)
+                {
+                    float3 positionWS = rayOrigin + distanceAlongRay * ray;
+                    float3 relative = positionWS - source.xyz;
+                    float distance01 = saturate(length(relative) / source.w);
+                    float axial = dot(relative, cone.xyz);
+                    float radial = saturate(length(relative - axial * cone.xyz) / max(axial * tangent, 1e-6));
+                    float edge = 1.0 - smoothstep(1.0 - _RetroLocalLightParams[index].y, 1.0, radial);
+                    float falloff = pow(1.0 - distance01, sharpness);
+                    if (shape.y > 0.0) falloff *= smoothstep(0.0, shape.y, distance01);
+                    if (shape.z > 0.0) falloff *= smoothstep(0.0, shape.z, 1.0 - distance01);
+                    float attenuation = edge * falloff * (1.0 - radial * shape.x);
+                    if (bandCount > 1.0)
+                        attenuation = round(attenuation * bandCount + bandOffset) / bandCount;
+                    if (attenuation <= 1e-4) continue;
+
+                    attenuation *= lerp(1.0, Pattern(index, positionWS, relative, source.w, cone.xyz), patternStrength);
+                    float opacity = 1.0 - exp(-0.045 * lightColor.w * attenuation * stepLength);
+                    float weight = throughput * opacity;
+                    float visibility = LocalShadow(positionWS, relative, shadowParams);
+                    if (debugLight)
+                    {
+                        visibilitySum += visibility * weight;
+                        visibilityWeight += weight;
+                    }
+                    integral += weight * visibility * exp(-fogRate * min(distanceAlongRay, fogDistance));
+                    throughput *= 1.0 - opacity;
+                    if (throughput < 0.01) break;
+                }
+                return lightColor.rgb * integral * _RetroVolumeParams1.y;
+            }
+
             half4 Frag(Varyings input) : SV_Target
             {
                 float2 uv = input.texcoord;
                 float rawDepth = SampleSceneDepth(uv);
-                float3 endWS = ComputeWorldSpacePosition(uv, rawDepth, UNITY_MATRIX_I_VP);
-                float3 ray = endWS - _WorldSpaceCameraPos;
+                #if UNITY_REVERSED_Z
+                    float deviceDepth = rawDepth;
+                    float nearDepth = 1.0;
+                    bool opaque = rawDepth > 0.0;
+                #else
+                    float deviceDepth = lerp(UNITY_NEAR_CLIP_VALUE, 1.0, rawDepth);
+                    float nearDepth = UNITY_NEAR_CLIP_VALUE;
+                    bool opaque = rawDepth < 1.0;
+                #endif
+                float3 endWS = ComputeWorldSpacePosition(uv, deviceDepth, UNITY_MATRIX_I_VP);
+                float3 nearWS = ComputeWorldSpacePosition(uv, nearDepth, UNITY_MATRIX_I_VP);
+                float3 rayOrigin = unity_OrthoParams.w > 0.5 ? nearWS : _WorldSpaceCameraPos;
+                float3 ray = endWS - rayOrigin;
                 float sceneDistance = length(ray);
                 float rayLength = max(0.0, min(sceneDistance, _RetroVolumeParams0.y) - _RetroVolumeParams3.x);
                 float3 rayDirection = ray / max(sceneDistance, 1e-4);
                 int steps = max(1, (int)_RetroVolumeParams2.x);
                 float stepLength = rayLength / steps;
                 float jitter = (Hash12(input.positionCS.xy) - 0.5) * _RetroVolumeParams2.z;
-                float3 positionWS = _WorldSpaceCameraPos + rayDirection * (stepLength * (0.5 + jitter));
+                float3 positionWS = rayOrigin + rayDirection * (stepLength * (0.5 + jitter));
                 float transmittance = 1.0;
                 float3 scattering = 0.0;
                 float visibilitySum = 0.0;
                 float visibilityWeight = 0.0;
 
                 [loop]
-                for (int stepIndex = 0; stepIndex < steps; stepIndex++)
+                for (int stepIndex = 0; stepIndex < steps && rayLength > 0.0 && _RetroVolumeParams0.x > 0.0; stepIndex++)
                 {
                     float densityShape = exp(-max(0.0, positionWS.y - _RetroVolumeParams0.z) * _RetroVolumeParams0.w);
                     if (_RetroVolumeParams2.w > 1.0)
@@ -152,6 +317,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                     [loop]
                     for (int lightIndex = 0; lightIndex < _RetroLocalLightCount; lightIndex++)
                     {
+                        if (_RetroLocalLightParams[lightIndex].x > 1.5) continue;
                         float3 relative = positionWS - _RetroLocalLightPosRange[lightIndex].xyz;
                         float distanceToLight = length(relative);
                         float range = _RetroLocalLightPosRange[lightIndex].w;
@@ -173,30 +339,7 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                         attenuation *= lerp(1.0, pattern, _RetroLocalLightStylization[lightIndex].y);
                         if (attenuation <= 1e-4)
                             continue;
-                        int shadowIndex = (int)round(_RetroLocalLightStylization[lightIndex].z);
-                        bool requiresLightShadow = _RetroLocalLightStylization[lightIndex].w > 0.5;
-                        float shadowVisibility = 1.0;
-                        if (requiresLightShadow)
-                        {
-                            // AdditionalLightRealtimeShadow deliberately returns one when
-                            // URP has no shadow slice for an index. That fallback is correct
-                            // for ordinary material lighting, but not for a separate direct
-                            // volumetric term: it causes a light to shine through geometry
-                            // whenever the current camera did not receive its atlas entry.
-                            // Volumetric Shadows = Use Light Shadows therefore fails closed.
-                            shadowVisibility = 0.0;
-                            if (shadowIndex >= 0)
-                            {
-                                half4 shadowParams = GetRetroPSXAdditionalLightShadowParams(shadowIndex);
-                                if (shadowParams.w >= 0.0)
-                                {
-                                    shadowVisibility = SampleRetroPSXAdditionalLightShadow(
-                                        positionWS,
-                                        normalize(-relative),
-                                        shadowParams);
-                                }
-                            }
-                        }
+                        float shadowVisibility = LocalShadow(positionWS, relative, LocalShadowParams(lightIndex));
                         if (_RetroPSXDebugMode == 10 && lightIndex == (int)round(_RetroVolumeParams3.z))
                         {
                             float sampleWeight = attenuation * density * stepLength;
@@ -215,6 +358,19 @@ Shader "Hidden/RetroPSX/VolumetricRaymarch"
                     transmittance *= exp(-density * _RetroVolumeParams1.x * stepLength);
                     if (transmittance < 0.01) break;
                     positionWS += rayDirection * stepLength;
+                }
+                float nearDistance = length(nearWS - rayOrigin);
+                float farDistance = sceneDistance - (opaque ? _RetroVolumeParams3.x : 0.0);
+                if (farDistance > nearDistance)
+                {
+                    float dither = RetroPSX_DitherValue(3, int2(input.positionCS.xy)) * 31.0;
+                    [loop]
+                    for (int index = 0; index < _RetroLocalLightCount; index++)
+                    {
+                        if (_RetroLocalLightParams[index].x < 1.5) continue;
+                        scattering += MarchShaft(index, rayOrigin, rayDirection, nearDistance, farDistance,
+                            rayLength, transmittance, steps, dither, visibilitySum, visibilityWeight);
+                    }
                 }
                 if (_RetroPSXDebugMode == 10)
                 {

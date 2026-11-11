@@ -45,7 +45,8 @@ Shader "Hidden/RetroPSX/VolumetricComposite"
 
             float EyeDepth(float2 uv)
             {
-                return LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
+                float depth = SampleSceneDepth(uv);
+                return unity_OrthoParams.w > 0.5 ? LinearDepthToEyeDepth(depth) : LinearEyeDepth(depth, _ZBufferParams);
             }
 
             float ScatteringLuminance(half3 color)

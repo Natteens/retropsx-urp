@@ -41,6 +41,7 @@ namespace RetroPSX.Rendering
         internal static readonly int LocalPatternTransform = Shader.PropertyToID("_RetroLocalPatternTransform");
         internal static readonly int LocalPatternParams = Shader.PropertyToID("_RetroLocalPatternParams");
         internal static readonly int LocalPatternExtra = Shader.PropertyToID("_RetroLocalPatternExtra");
+        internal static readonly int LocalShaftShape = Shader.PropertyToID("_RetroLocalShaftShape");
         internal static readonly int LocalLightStylization = Shader.PropertyToID("_RetroLocalLightStylization");
         internal static readonly int Pattern0 = Shader.PropertyToID("_RetroPattern0");
         internal static readonly int Pattern1 = Shader.PropertyToID("_RetroPattern1");

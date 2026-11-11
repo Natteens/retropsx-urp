@@ -22,6 +22,7 @@ namespace RetroPSX.Rendering
         private readonly Vector4[] patternTransform = new Vector4[MaximumLocalLights];
         private readonly Vector4[] patternParams = new Vector4[MaximumLocalLights];
         private readonly Vector4[] patternExtra = new Vector4[MaximumLocalLights];
+        private readonly Vector4[] shaftShape = new Vector4[MaximumLocalLights];
         private readonly Vector4[] lightStylization = new Vector4[MaximumLocalLights];
 
         private RetroPSXPipelineProfile profile;
@@ -212,6 +213,7 @@ namespace RetroPSX.Rendering
             volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.LocalPatternParams, patternParams);
             volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.LocalPatternExtra, patternExtra);
             volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.LocalLightStylization, lightStylization);
+            volumetricMaterial.SetVectorArray(RetroPSXShaderIDs.LocalShaftShape, shaftShape);
         }
 
         private void PackLight(int index, RetroVolumetricLight volume, UniversalLightData lightData)
@@ -227,6 +229,7 @@ namespace RetroPSX.Rendering
                 patternParams[index] = new Vector4(0f, 1f, 0.5f, 0.1f);
                 patternExtra[index] = Vector4.zero;
                 lightStylization[index] = new Vector4(1f, 0f, -1f, 0f);
+                shaftShape[index] = Vector4.zero;
                 SetPatternTexture(index, texture);
                 return;
             }
@@ -239,7 +242,10 @@ namespace RetroPSX.Rendering
             Vector3 forward = transform.forward;
             lightDirAngle[index] = new Vector4(forward.x, forward.y, forward.z, outerCos);
             lightColorDensity[index] = new Vector4(linear.r, linear.g, linear.b, volume.Density);
-            int shadowIndex = volume.UsesLightShadows ? FindAdditionalLightIndex(light, lightData) : -1;
+            bool shaft = volume.IsStylizedShaft;
+            bool usesShadows = volume.UsesLightShadows && (!shaft || light.shadows != LightShadows.None);
+            int shadowIndex = usesShadows ? FindAdditionalLightIndex(light, lightData) : -1;
+            shaftShape[index] = volume.ShaftShape;
             // The shadow index is only meaningful while URP has included the light for this
             // camera.  The shader also checks that an atlas slice was allocated: a missing
             // slice must never silently turn into unshadowed direct volumetric lighting.
@@ -247,11 +253,11 @@ namespace RetroPSX.Rendering
                 volume.BeamSharpness,
                 volume.PatternStrength,
                 shadowIndex,
-                volume.UsesLightShadows ? 1f : 0f);
+                usesShadows ? 1f : 0f);
 
             RetroVolumetricPattern pattern = volume.Pattern;
             RetroVolumetricPatternType type = pattern != null ? pattern.Type : RetroVolumetricPatternType.None;
-            lightParams[index] = new Vector4(light.type == LightType.Spot ? 1f : 0f, volume.EdgeSoftness, (float)type, volume.NoiseDistortion);
+            lightParams[index] = new Vector4(shaft ? 2f : light.type == LightType.Spot ? 1f : 0f, volume.EdgeSoftness, (float)type, volume.NoiseDistortion);
             if (pattern != null)
             {
                 Vector2 offset = pattern.Offset + pattern.ScrollVelocity * Time.time;
