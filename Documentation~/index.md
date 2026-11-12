@@ -34,7 +34,7 @@ The root profile references these setting assets:
 
 - `RetroRasterProfile`: raster mode, internal size, and presentation
 - `RetroGeometryProfile`: integer precision, artistic snapping, and affine mapping
-- `RetroColorProfile`: channel precision and material/final-image dithering
+- `RetroColorProfile`: channel precision, material and final-image dithering, posterization, and palette mapping
 - `RetroLightingProfile`: default material lighting, ambient light, and bounded local-light count
 - `RetroFogProfile`: distance color, distance modulation, and stepped distance color fog
 - `RetroVolumetricProfile`: raymarch quality and integration controls
@@ -42,7 +42,7 @@ The root profile references these setting assets:
 - `RetroUIProfile` (optional): native versus Retro world-space UI policy and its reserved native UI layer
 - `RetroDebugProfile`: diagnostic output mode
 
-`RetroTextureProfile` and `RetroVolumetricPattern` are independent authoring assets. Profiles contain settings only; they never own GPU resources. **Create Complete Profile Set** creates linked assets with defaults, not artistic looks.
+`RetroTextureProfile`, `RetroVolumetricPattern`, and `RetroPaletteProfile` are independent authoring assets. Profiles contain settings only; they never own GPU resources. **Create Complete Profile Set** creates linked assets with neutral defaults.
 
 ## RenderGraph order
 
@@ -101,6 +101,12 @@ The PSX matrix is:
 ```
 
 Material dithering is locked to canonical pixel coordinates and runs before material quantization. Custom and blue-noise patterns are final-image options. Final-image quantization is an explicit opt-in for ordinary URP materials or for folding transparent and atmospheric blends back onto the palette. When volumetrics run, this processing is deferred until after their composite so the frame is quantized once. Leave it disabled when integrated materials already provide the desired palette treatment.
+
+Artistic color runs after optional legacy final-image quantization, in canonical resolve or in the volumetric composite when atmosphere is active. RGB posterization uses equally spaced sRGB channel levels. Luminance posterization computes linear Rec. 709 luminance, quantizes its sRGB encoding, and rescales linear RGB. Colors outside the display gamut are moved toward neutral at constant luminance, near-black chroma fades to gray, and HDR luminance at or above display white maps from white.
+
+Palette mapping compares display-range linear RGB in OKLab. Palette dithering picks a second swatch whose segment from the nearest swatch best fits the input, then compares the projected mix against a normalized threshold. With both effects active, dithering belongs to the palette stage. Ordered, blue-noise, and custom patterns use canonical pixel coordinates and remain stable between frames.
+
+The palette caches linear RGB and OKLab swatches on color changes. Mapping searches up to 64 entries per pixel and dithering can add a second search. Both run in the existing final-color pass with no LUT or added fullscreen copy. Cost scales with palette size and internal pixel count, so start with a small palette at native resolution.
 
 ## UI Toolkit composition
 

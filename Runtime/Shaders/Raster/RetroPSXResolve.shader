@@ -15,29 +15,9 @@ Shader "Hidden/RetroPSX/Resolve"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
             #include "../Includes/RetroPSXCommon.hlsl"
+            #include "../Includes/RetroPSXFinalColor.hlsl"
 
-            TEXTURE2D(_RetroCustomDither);
-            SAMPLER(sampler_RetroCustomDither);
-            TEXTURE2D(_RetroBlueNoise);
-            SAMPLER(sampler_RetroBlueNoise);
-            float4 _RetroFinalColorParams;
             float _RetroPreserveAlpha;
-
-            float ResolveDither(int mode, int2 pixel)
-            {
-                float value = 0.0;
-                if (mode <= 3)
-                    value = RetroPSXDitherValue(mode, pixel);
-                else
-                {
-                    float2 uv = (pixel + 0.5) * _RetroPSXInternalSize.zw;
-                    if (mode == 4)
-                        value = (SAMPLE_TEXTURE2D(_RetroCustomDither, sampler_RetroCustomDither, uv).r - 0.5) / 31.0;
-                    else if (mode == 5)
-                        value = (SAMPLE_TEXTURE2D(_RetroBlueNoise, sampler_RetroBlueNoise, uv * 0.5).r - 0.5) / 31.0;
-                }
-                return value;
-            }
 
             half4 Frag(Varyings input) : SV_Target
             {
@@ -57,14 +37,11 @@ Shader "Hidden/RetroPSX/Resolve"
 
                 int2 pixel = int2(input.positionCS.xy);
                 int ditherMode = (int)_RetroFinalColorParams.y;
-                if (_RetroFinalColorParams.x > 0.5 && _RetroPSXColorBits.w > 0.5)
-                {
-                    float3 srgb = LinearToSRGB(saturate((float3)color));
-                    srgb += ResolveDither(ditherMode, pixel) * _RetroFinalColorParams.z;
-                    float3 levels = exp2(_RetroPSXColorBits.xyz) - 1.0;
-                    srgb = round(saturate(srgb) * levels) / levels;
-                    color = (half3)SRGBToLinear(srgb);
-                }
+                color = RetroPSX_ApplyFinalImagePrecision(color, pixel);
+                half3 precise = color;
+                // Fully transparent texels of alpha-preserving targets keep their RGB.
+                if (_RetroPreserveAlpha < 0.5 || original.a > 0.0)
+                    color = RetroPSX_ApplyArtisticColor(color, pixel);
 
                 if (_RetroPSXDebugMode == 1)
                     color = half3(frac(pixel.x / 16.0), frac(pixel.y / 16.0), 0.15);
@@ -77,9 +54,9 @@ Shader "Hidden/RetroPSX/Resolve"
                         : lerp(half3(0.04, 0.05, 0.07), half3(0.28, 0.31, 0.34), checker);
                 }
                 else if (_RetroPSXDebugMode == 3)
-                    color = abs(original.rgb - color) * 8.0;
+                    color = abs(original.rgb - precise) * 8.0;
                 else if (_RetroPSXDebugMode == 4)
-                    color = ResolveDither(max(ditherMode, 1), pixel) * 16.0 + 0.5;
+                    color = RetroPSX_FinalImageDither(max(ditherMode, 1), pixel) * 16.0 + 0.5;
                 else if (_RetroPSXDebugMode == 5)
                     color = fogFactor.xxx;
                 else if (_RetroPSXDebugMode == 8)
@@ -88,6 +65,10 @@ Shader "Hidden/RetroPSX/Resolve"
                     float3 positionWS = ComputeWorldSpacePosition(uv, rawDepth, UNITY_MATRIX_I_VP);
                     color = frac(abs(positionWS) * 0.1);
                 }
+                else if (_RetroPSXDebugMode == 11)
+                    color = abs(precise - color) * 4.0;
+                else if (_RetroPSXDebugMode == 12)
+                    color = RetroPSX_ArtisticDitherThreshold(pixel).xxx;
                 return half4(color, _RetroPreserveAlpha > 0.5 ? original.a : 1.0);
             }
             ENDHLSL

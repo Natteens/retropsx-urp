@@ -23,6 +23,12 @@ namespace RetroPSX.Rendering
         internal static readonly int FinalColorParams = Shader.PropertyToID("_RetroFinalColorParams");
         internal static readonly int CustomDither = Shader.PropertyToID("_RetroCustomDither");
         internal static readonly int BlueNoise = Shader.PropertyToID("_RetroBlueNoise");
+        internal static readonly int PosterizeParams = Shader.PropertyToID("_RetroPosterizeParams");
+        internal static readonly int PaletteParams = Shader.PropertyToID("_RetroPaletteParams");
+        internal static readonly int ArtisticDither = Shader.PropertyToID("_RetroArtisticDither");
+        internal static readonly int ArtisticDitherSize = Shader.PropertyToID("_RetroArtisticDitherSize");
+        internal static readonly int PaletteLinear = Shader.PropertyToID("_RetroPaletteLinear");
+        internal static readonly int PaletteOklab = Shader.PropertyToID("_RetroPaletteOklab");
         internal static readonly int PresentationRect = Shader.PropertyToID("_RetroPresentationRect");
         internal static readonly int LetterboxColor = Shader.PropertyToID("_RetroLetterboxColor");
         internal static readonly int PreserveAlpha = Shader.PropertyToID("_RetroPreserveAlpha");

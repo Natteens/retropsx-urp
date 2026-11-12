@@ -139,9 +139,37 @@ namespace RetroPSX.Rendering
                 (float)color.FinalImageDither,
                 color.FinalImageDitherStrength,
                 profile.Fog.Enabled && profile.Fog.ApplyToWholeFrame ? 1f : 0f));
-            resolveMaterial.SetTexture(RetroPSXShaderIDs.CustomDither, color.CustomPattern != null ? color.CustomPattern : Texture2D.grayTexture);
-            resolveMaterial.SetTexture(RetroPSXShaderIDs.BlueNoise, color.BlueNoise != null ? color.BlueNoise : Texture2D.grayTexture);
+            ConfigureDitherTextures(resolveMaterial, color);
+            ConfigureArtisticColor(resolveMaterial, color, applyFinalColor);
             resolveMaterial.SetFloat(RetroPSXShaderIDs.PreserveAlpha, preserveOutputAlpha ? 1f : 0f);
+        }
+
+        private static void ConfigureDitherTextures(Material material, RetroColorProfile color)
+        {
+            Texture2D custom = color.CustomPattern != null ? color.CustomPattern : Texture2D.grayTexture;
+            Texture2D blueNoise = color.BlueNoise != null ? color.BlueNoise : Texture2D.grayTexture;
+            material.SetTexture(RetroPSXShaderIDs.CustomDither, custom);
+            material.SetTexture(RetroPSXShaderIDs.BlueNoise, blueNoise);
+            material.SetVector(RetroPSXShaderIDs.ArtisticDitherSize, new Vector4(custom.width, custom.height, blueNoise.width, blueNoise.height));
+            material.SetVector(RetroPSXShaderIDs.ArtisticDither, new Vector4(
+                (float)color.PosterizeDither, custom.isDataSRGB ? 1f : 0f, blueNoise.isDataSRGB ? 1f : 0f, 0f));
+        }
+
+        // Applied by whichever pass owns the final color treatment; the other one receives zeros.
+        private static void ConfigureArtisticColor(Material material, RetroColorProfile color, bool apply)
+        {
+            material.SetVector(RetroPSXShaderIDs.PosterizeParams, apply && color.PosterizeActive
+                ? new Vector4((float)color.PosterizeMode, color.PosterizeLevels, color.PosterizeStrength, color.PosterizeDitherStrength)
+                : Vector4.zero);
+            if (apply && color.PaletteActive && color.Palette.TryGetShaderData(out int count, out Vector4[] linear, out Vector4[] oklab))
+            {
+                material.SetVectorArray(RetroPSXShaderIDs.PaletteLinear, linear);
+                material.SetVectorArray(RetroPSXShaderIDs.PaletteOklab, oklab);
+                material.SetVector(RetroPSXShaderIDs.PaletteParams, new Vector4(
+                    count, color.PaletteStrength, (float)color.PaletteDither, color.PaletteDitherStrength));
+            }
+            else
+                material.SetVector(RetroPSXShaderIDs.PaletteParams, Vector4.zero);
         }
 
         private TextureHandle AddVolumetrics(
@@ -188,8 +216,8 @@ namespace RetroPSX.Rendering
                 (float)color.FinalImageDither,
                 color.FinalImageDitherStrength,
                 0f));
-            volumetricCompositeMaterial.SetTexture(RetroPSXShaderIDs.CustomDither, color.CustomPattern != null ? color.CustomPattern : Texture2D.grayTexture);
-            volumetricCompositeMaterial.SetTexture(RetroPSXShaderIDs.BlueNoise, color.BlueNoise != null ? color.BlueNoise : Texture2D.grayTexture);
+            ConfigureDitherTextures(volumetricCompositeMaterial, color);
+            ConfigureArtisticColor(volumetricCompositeMaterial, color, applyFinalColor);
             volumetricCompositeMaterial.SetFloat(RetroPSXShaderIDs.PreserveAlpha, preserveOutputAlpha ? 1f : 0f);
             AddBlit(renderGraph, "RetroPSX / Volumetric Composite", canonical, composite, volumetricCompositeMaterial, 0, volume,
                 depth, TextureHandle.nullHandle, false);

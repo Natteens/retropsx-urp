@@ -8,6 +8,8 @@ namespace RetroPSX
     public enum RetroPresentationMode { Stretch, AspectFit, IntegerFit }
     public enum RetroColorMode { Off, RGB444, RGB555, RGB565, RGB666, Custom }
     public enum RetroDitherMode { Off, PSX, Bayer2x2, Bayer4x4, Custom, BlueNoise }
+    /// <summary>Artistic posterization of the final image, independent from material color precision.</summary>
+    public enum RetroPosterizeMode { Off, RGB, Luminance }
     public enum RetroAffineMode { Off, Authentic, ArtisticBlend }
     public enum RetroGeometryPrecisionMode { Off, AuthenticInteger, Artistic }
     public enum RetroLightingMode { Unlit, VertexLit, ModernLit }
@@ -31,6 +33,8 @@ namespace RetroPSX
         VolumetricBuffer,
         DepthReconstruction,
         FinalComposite,
-        VolumetricLightVisibility
+        VolumetricLightVisibility,
+        ArtisticColorChange,
+        ArtisticDitherThreshold
     }
 }

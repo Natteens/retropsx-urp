@@ -10,6 +10,7 @@ It is intended for games, not cycle-accurate hardware emulation.
 - Full-viewport output at 16:9, ultrawide, and arbitrary camera sizes
 - Integer screen-space vertex snapping and affine texture interpolation
 - Vertex colors, vertex lighting, point sampling, RGB precision, and ordered dithering
+- Opt-in RGB and luminance posterization, reusable palettes, and palette-aware dithering
 - Distance color, distance modulation, and stepped distance fog
 - Reduced-resolution volumetric fog with directional, point, and spot lights
 - Optional projected volumetric patterns, CRT treatment, and debug views
@@ -49,6 +50,20 @@ Base game cameras targeting a RenderTexture run the same pipeline as screen came
 The root pipeline profile links separate assets for raster, geometry, color, lighting, fog, volumetrics, display, and debug settings. Profiles own configuration only; per-camera textures are transient RenderGraph resources.
 
 The profile command creates linked assets with neutral defaults. The package does not ship artistic preset assets.
+
+### Artistic color
+
+In the Color profile, **Material Precision** controls the existing PSX material shader quantization. **Final Image Precision** optionally applies the legacy channel bits to the whole frame. **Posterization** and **Palette Mapping** are independent, opt-in final-image effects that also work on ordinary URP materials.
+
+- **RGB** quantizes each sRGB channel to 2–64 levels at full strength. Four levels give up to 64 RGB combinations.
+- **Luminance** quantizes brightness into the chosen number of bands and retains hue as far as the display gamut allows.
+- **Palette Mapping** assigns reusable sRGB swatches. At 100% strength, visible pixels leaving the stage use only palette colors. Partial strength blends with the incoming color. Dither distributes pixels between two palette entries on the internal pixel grid.
+
+Create a palette from **Assets > Create > RetroPSX > Profiles > Palette**, then assign it under **Palette Mapping**. Edit swatches or hex values directly, or preview an import before replacing or appending colors. PNG import scans unique RGB values from left to right and top to bottom, skipping fully transparent pixels. HEX import accepts one `RRGGBB` or `#RRGGBB` per line. Imports keep the first occurrence of each color and report palettes above the 64-color limit.
+
+For an industrial look, try **RGB555** material precision, **Luminance** at six levels, and a full-strength palette of `101413 242D2B 414C43 68745D A5A184 D6CBB0` with **Bayer 4×4** at 0.65 dither strength.
+
+Final-image precision, posterization, and palette mapping run in that order after atmosphere and before presentation, CRT, Native UI, and URP post-processing. Those later stages can change the displayed colors. **Full Pipeline** previews artistic color in Scene View. RGBA targets keep their alpha, and fully transparent texels skip artistic processing.
 
 ## Materials
 

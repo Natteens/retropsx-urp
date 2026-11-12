@@ -16,31 +16,11 @@ Shader "Hidden/RetroPSX/VolumetricComposite"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 
             TEXTURE2D(_RetroVolumeTexture);
-            TEXTURE2D(_RetroCustomDither);
-            SAMPLER(sampler_RetroCustomDither);
-            TEXTURE2D(_RetroBlueNoise);
-            SAMPLER(sampler_RetroBlueNoise);
             float4 _RetroVolumeTexelSize;
             float4 _RetroVolumeParams3;
-            float4 _RetroFinalColorParams;
             float _RetroPreserveAlpha;
             #include "../Includes/RetroPSXCommon.hlsl"
-
-            float FinalDither(int mode, int2 pixel)
-            {
-                float value = 0.0;
-                if (mode <= 3)
-                    value = RetroPSX_DitherValue(mode, pixel);
-                else
-                {
-                    float2 patternUV = (pixel + 0.5) * _RetroPSXInternalSize.zw;
-                    if (mode == 4)
-                        value = (SAMPLE_TEXTURE2D(_RetroCustomDither, sampler_RetroCustomDither, patternUV).r - 0.5) / 31.0;
-                    else if (mode == 5)
-                        value = (SAMPLE_TEXTURE2D(_RetroBlueNoise, sampler_RetroBlueNoise, patternUV * 0.5).r - 0.5) / 31.0;
-                }
-                return value;
-            }
+            #include "../Includes/RetroPSXFinalColor.hlsl"
 
             // Atmospheric scattering is identical for every surface past Max Distance, so depths are
             // compared clamped to it. Planar surfaces are affine in screen space in 1/z (z when ortho).
@@ -162,14 +142,20 @@ Shader "Hidden/RetroPSX/VolumetricComposite"
                 if (_RetroPSXDebugMode == 6)
                     return half4((1.0 - volume.a).xxx, _RetroPreserveAlpha > 0.5 ? baseColor.a : 1.0);
                 half3 composite = baseColor.rgb * volume.a + volume.rgb;
-                if (_RetroFinalColorParams.x > 0.5)
+                // Resolve debug views retain their legacy composite and skip artistic color.
+                int debugMode = _RetroPSXDebugMode;
+                bool resolveDebug = debugMode == 1 || debugMode == 2 || debugMode == 3 || debugMode == 4 || debugMode == 5 || debugMode == 8;
+                int2 pixel = int2(input.positionCS.xy);
+                half3 precise = RetroPSX_ApplyFinalImagePrecision(composite, pixel);
+                composite = precise;
+                if (!resolveDebug)
                 {
-                    int2 pixel = int2(input.positionCS.xy);
-                    float3 srgb = LinearToSRGB(saturate((float3)composite));
-                    srgb += FinalDither((int)_RetroFinalColorParams.y, pixel) * _RetroFinalColorParams.z;
-                    float3 levels = exp2(_RetroPSXColorBits.xyz) - 1.0;
-                    srgb = round(saturate(srgb) * levels) / levels;
-                    composite = (half3)SRGBToLinear(srgb);
+                    if (_RetroPreserveAlpha < 0.5 || baseColor.a > 0.0)
+                        composite = RetroPSX_ApplyArtisticColor(precise, pixel);
+                    if (debugMode == 11)
+                        composite = abs(precise - composite) * 4.0;
+                    else if (debugMode == 12)
+                        composite = RetroPSX_ArtisticDitherThreshold(pixel).xxx;
                 }
                 return half4(composite, _RetroPreserveAlpha > 0.5 ? baseColor.a : 1.0);
             }
