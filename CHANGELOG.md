@@ -1,3 +1,18 @@
+# [1.2.0](https://github.com/Natteens/retropsx-urp/compare/v1.1.7...v1.2.0) (2026-11-12)
+
+
+### Bug Fixes
+
+* remove volumetric horizon bands and refine stylized lighting [skip ci] ([24d51fa](https://github.com/Natteens/retropsx-urp/commit/24d51fa65b0c984e8ed198e7042caa84afc87886))
+
+
+### Features
+
+* add artistic posterization and custom palette mapping ([d54bcb4](https://github.com/Natteens/retropsx-urp/commit/d54bcb4f52124812fab04208a2c9d4e49510dc86))
+* add directional sun shafts independent of atmospheric density [skip ci] ([bb43f2d](https://github.com/Natteens/retropsx-urp/commit/bb43f2d5430efaff49d1eb1ea4ca94bf803c0a07))
+* add stylized volumetric shafts [skip ci] ([6d8698c](https://github.com/Natteens/retropsx-urp/commit/6d8698c92d684b3917ad8f14fd8b6a5fe4fd383a))
+* polish PSX volumetric lighting [skip ci] ([0721d5c](https://github.com/Natteens/retropsx-urp/commit/0721d5c485f5a33fd84d4a18df219221c2a756cc))
+
 ## [1.1.7](https://github.com/Natteens/retropsx-urp/compare/v1.1.6...v1.1.7) (2026-09-05)
 
 
