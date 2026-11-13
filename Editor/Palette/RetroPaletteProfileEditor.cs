@@ -53,14 +53,14 @@ namespace RetroPSX.Editor
                 EditorGUI.DrawRect(strip, RetroColorEditorGUI.LineColor);
             RetroColorEditorGUI.Swatches(strip, values);
 
-            EditorGUILayout.LabelField($"{count} / {RetroPaletteProfile.MaxColors} colors", EditorStyles.miniLabel);
+            EditorGUILayout.LabelField(new GUIContent($"{count} / {RetroPaletteProfile.MaxColors} colors",
+                "Colors are sRGB and opaque: palette alpha is not used and never changes image transparency."), EditorStyles.miniLabel);
             if (count == 0)
                 EditorGUILayout.HelpBox("The palette is empty. Palette Mapping is skipped until it has at least one color.", MessageType.Warning);
             else if (count > RetroPaletteProfile.MaxColors)
                 EditorGUILayout.HelpBox($"A palette holds at most {RetroPaletteProfile.MaxColors} colors. Palette Mapping is skipped.", MessageType.Error);
             else if (count == 1)
                 RetroColorEditorGUI.InfoLine("A single color maps the whole image to that color.", "triangle-exclamation-point");
-            RetroColorEditorGUI.InfoLine("Colors are sRGB and opaque: palette alpha is not used and never changes image transparency.");
         }
 
         private void DrawElement(Rect rect, int index, bool active, bool focused)
@@ -122,7 +122,9 @@ namespace RetroPSX.Editor
 
         private void DrawActions()
         {
-            using (new EditorGUILayout.HorizontalScope())
+            // Narrow inspectors stack the buttons instead of clipping their labels.
+            bool narrow = EditorGUIUtility.currentViewWidth < 340f;
+            using (narrow ? (GUI.Scope)new EditorGUILayout.VerticalScope() : new EditorGUILayout.HorizontalScope())
             {
                 if (RetroColorEditorGUI.IconTextButton("plus", "Import PNG…", "Read unique colors from a palette image (strip, column, swatch grid). The texture's import settings are not changed."))
                 {
@@ -139,7 +141,7 @@ namespace RetroPSX.Editor
                 if (RetroColorEditorGUI.IconTextButton("copy", "Paste HEX", "Read colors from the clipboard, one RRGGBB per line."))
                     pending = RetroPaletteImport.ParseHex(EditorGUIUtility.systemCopyBuffer, "Clipboard");
             }
-            using (new EditorGUILayout.HorizontalScope())
+            using (narrow ? (GUI.Scope)new EditorGUILayout.VerticalScope() : new EditorGUILayout.HorizontalScope())
             {
                 using (new EditorGUI.DisabledScope(colors.arraySize == 0))
                 {
@@ -152,7 +154,8 @@ namespace RetroPSX.Editor
                             File.WriteAllText(path, RetroPaletteImport.ToHexText(CurrentColors(), false));
                     }
                 }
-                GUILayout.FlexibleSpace();
+                if (!narrow)
+                    GUILayout.FlexibleSpace();
             }
         }
 

@@ -9,10 +9,9 @@
 
 #define RETROPSX_MAX_PALETTE_COLORS 64
 
+// Threshold textures are read texel by texel (LOAD), never filtered.
 TEXTURE2D(_RetroCustomDither);
-SAMPLER(sampler_RetroCustomDither);
 TEXTURE2D(_RetroBlueNoise);
-SAMPLER(sampler_RetroBlueNoise);
 float4 _RetroFinalColorParams;
 // x: mode (0 off, 1 RGB, 2 luminance), y: levels, z: strength, w: dither strength.
 float4 _RetroPosterizeParams;
@@ -25,38 +24,6 @@ float4 _RetroArtisticDitherSize;
 float4 _RetroPaletteLinear[RETROPSX_MAX_PALETTE_COLORS];
 float4 _RetroPaletteOklab[RETROPSX_MAX_PALETTE_COLORS];
 
-// Legacy amplitude, scaled for RGB bit quantization. Unchanged so existing profiles stay identical.
-float RetroPSX_FinalImageDither(int mode, int2 pixel)
-{
-    float value = 0.0;
-    if (mode <= 3)
-        value = RetroPSX_DitherValue(mode, pixel);
-    else
-    {
-        float2 uv = (pixel + 0.5) * _RetroPSXInternalSize.zw;
-        if (mode == 4)
-            value = (SAMPLE_TEXTURE2D(_RetroCustomDither, sampler_RetroCustomDither, uv).r - 0.5) / 31.0;
-        else if (mode == 5)
-            value = (SAMPLE_TEXTURE2D(_RetroBlueNoise, sampler_RetroBlueNoise, uv * 0.5).r - 0.5) / 31.0;
-    }
-    return value;
-}
-
-half3 RetroPSX_ApplyFinalImagePrecision(half3 color, int2 pixel)
-{
-    if (_RetroFinalColorParams.x > 0.5 && _RetroPSXColorBits.w > 0.5)
-    {
-        float3 srgb = LinearToSRGB(saturate((float3)color));
-        srgb += RetroPSX_FinalImageDither((int)_RetroFinalColorParams.y, pixel) * _RetroFinalColorParams.z;
-        float3 levels = exp2(_RetroPSXColorBits.xyz) - 1.0;
-        srgb = round(saturate(srgb) * levels) / levels;
-        color = (half3)SRGBToLinear(srgb);
-    }
-    return color;
-}
-
-// Normalized ordered-dither threshold in (0, 1), tiled in internal-resolution pixels. Unlike the legacy
-// amplitude it does not depend on a bit depth, so it is valid for any level count or palette.
 static const float RetroPSX_PSXThreshold[16] = {
     0.0625, 0.5625, 0.1875, 0.6875, 0.8125, 0.3125, 0.9375, 0.4375,
     0.1875, 0.6875, 0.0625, 0.5625, 0.9375, 0.4375, 0.8125, 0.3125 };
@@ -94,6 +61,28 @@ float RetroPSX_DitherThreshold(int mode, int2 pixel)
     return threshold;
 }
 
+// Legacy amplitude, scaled for RGB bit quantization. Texture patterns tile per internal pixel like the
+// artistic stages (they used to be stretched over the whole image and filtered).
+float RetroPSX_FinalImageDither(int mode, int2 pixel)
+{
+    if (mode <= 3)
+        return RetroPSX_DitherValue(mode, pixel);
+    return (RetroPSX_DitherThreshold(mode, pixel) - 0.5) / 31.0;
+}
+
+half3 RetroPSX_ApplyFinalImagePrecision(half3 color, int2 pixel)
+{
+    if (_RetroFinalColorParams.x > 0.5 && _RetroPSXColorBits.w > 0.5)
+    {
+        float3 srgb = LinearToSRGB(saturate((float3)color));
+        srgb += RetroPSX_FinalImageDither((int)_RetroFinalColorParams.y, pixel) * _RetroFinalColorParams.z;
+        float3 levels = exp2(_RetroPSXColorBits.xyz) - 1.0;
+        srgb = round(saturate(srgb) * levels) / levels;
+        color = (half3)SRGBToLinear(srgb);
+    }
+    return color;
+}
+
 float RetroPSX_Luminance(float3 linearColor)
 {
     return dot(linearColor, float3(0.2126, 0.7152, 0.0722));
@@ -101,6 +90,8 @@ float RetroPSX_Luminance(float3 linearColor)
 
 // HDR policy: luminance is clamped to 1 and out-of-range channels are desaturated toward white at
 // constant luminance, so bright saturated highlights keep their hue instead of clipping per channel.
+// Only the stage input is fitted: partial strength mixes with the unfitted color, so HDR values fade in
+// continuously from strength 0 instead of jumping to the display range at the first non-zero strength.
 float3 RetroPSX_FitToDisplayRange(float3 linearColor)
 {
     float3 color = max(linearColor, 0.0);
@@ -204,6 +195,19 @@ void RetroPSX_FindPalettePair(float3 lab, int count, bool findSecond, out int fi
     }
 }
 
+// Ordered dither between the pair. The pattern is anchored to the pair's palette order, not to which of
+// the two is nearest: where the nearest color flips along a gradient the coverage stays continuous and
+// the pattern does not invert into its complement (which showed as a seam of clumped pixels).
+int RetroPSX_PickPaletteColor(int first, int second, float towardSecond, float threshold)
+{
+    if (second == first)
+        return first;
+    bool ordered = first < second;
+    float towardHigh = ordered ? towardSecond : 1.0 - towardSecond;
+    bool high = towardHigh > threshold;
+    return high == ordered ? second : first;
+}
+
 // Mixes in sRGB-encoded values; strength 1 returns the processed color untouched.
 float3 RetroPSX_MixStrength(float3 original, float3 processed, float strength)
 {
@@ -230,7 +234,7 @@ half3 RetroPSX_ApplyArtisticColor(half3 linearColor, int2 pixel)
     if (!RetroPSX_ArtisticColorActive())
         return linearColor;
 
-    float3 color = RetroPSX_FitToDisplayRange((float3)linearColor);
+    float3 color = (float3)linearColor;
     bool palette = _RetroPaletteParams.x > 0.5 && _RetroPaletteParams.y > 0.0;
     if (_RetroPosterizeParams.x > 0.5 && _RetroPosterizeParams.z > 0.0)
     {
@@ -239,9 +243,10 @@ half3 RetroPSX_ApplyArtisticColor(half3 linearColor, int2 pixel)
         float ditherStrength = ditherMode > 0 ? _RetroPosterizeParams.w : 0.0;
         float threshold = ditherMode > 0 ? RetroPSX_DitherThreshold(ditherMode, pixel) : 0.5;
         float levels = clamp(round(_RetroPosterizeParams.y), 2.0, 64.0);
+        float3 fitted = RetroPSX_FitToDisplayRange(color);
         float3 posterized = _RetroPosterizeParams.x > 1.5
-            ? RetroPSX_PosterizeLuminance(color, levels, threshold, ditherStrength)
-            : RetroPSX_PosterizeRGB(color, levels, threshold, ditherStrength);
+            ? RetroPSX_PosterizeLuminance(fitted, levels, threshold, ditherStrength)
+            : RetroPSX_PosterizeRGB(fitted, levels, threshold, ditherStrength);
         color = RetroPSX_MixStrength(color, posterized, _RetroPosterizeParams.z);
     }
 
@@ -252,8 +257,8 @@ half3 RetroPSX_ApplyArtisticColor(half3 linearColor, int2 pixel)
         float ditherStrength = ditherMode > 0 ? saturate(_RetroPaletteParams.w) : 0.0;
         int first, second;
         float t;
-        RetroPSX_FindPalettePair(RetroPSX_LinearToOklab(color), count, ditherStrength > 0.0, first, second, t);
-        int chosen = t * ditherStrength > RetroPSX_DitherThreshold(ditherMode, pixel) ? second : first;
+        RetroPSX_FindPalettePair(RetroPSX_LinearToOklab(RetroPSX_FitToDisplayRange(color)), count, ditherStrength > 0.0, first, second, t);
+        int chosen = RetroPSX_PickPaletteColor(first, second, t * ditherStrength, RetroPSX_DitherThreshold(ditherMode, pixel));
         color = RetroPSX_MixStrength(color, _RetroPaletteLinear[chosen].rgb, _RetroPaletteParams.y);
     }
     return (half3)color;

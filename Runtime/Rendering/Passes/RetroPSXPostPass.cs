@@ -136,7 +136,7 @@ namespace RetroPSX.Rendering
             resolveMaterial.SetVector(RetroPSXShaderIDs.ColorBits, new Vector4(bits.x, bits.y, bits.z, color.Mode == RetroColorMode.Off ? 0f : 1f));
             resolveMaterial.SetVector(RetroPSXShaderIDs.FinalColorParams, new Vector4(
                 applyFinalColor && color.QuantizeFinalImage ? 1f : 0f,
-                (float)color.FinalImageDither,
+                (float)color.EffectiveDither(color.FinalImageDither),
                 color.FinalImageDitherStrength,
                 profile.Fog.Enabled && profile.Fog.ApplyToWholeFrame ? 1f : 0f));
             ConfigureDitherTextures(resolveMaterial, color);
@@ -146,13 +146,15 @@ namespace RetroPSX.Rendering
 
         private static void ConfigureDitherTextures(Material material, RetroColorProfile color)
         {
+            // Modes whose texture is missing are sent as Off (EffectiveDither), so gray is only a safe binding.
             Texture2D custom = color.CustomPattern != null ? color.CustomPattern : Texture2D.grayTexture;
-            Texture2D blueNoise = color.BlueNoise != null ? color.BlueNoise : Texture2D.grayTexture;
+            Texture2D effectiveBlueNoise = color.EffectiveBlueNoise;
+            Texture2D blueNoise = effectiveBlueNoise != null ? effectiveBlueNoise : Texture2D.grayTexture;
             material.SetTexture(RetroPSXShaderIDs.CustomDither, custom);
             material.SetTexture(RetroPSXShaderIDs.BlueNoise, blueNoise);
             material.SetVector(RetroPSXShaderIDs.ArtisticDitherSize, new Vector4(custom.width, custom.height, blueNoise.width, blueNoise.height));
             material.SetVector(RetroPSXShaderIDs.ArtisticDither, new Vector4(
-                (float)color.PosterizeDither, custom.isDataSRGB ? 1f : 0f, blueNoise.isDataSRGB ? 1f : 0f, 0f));
+                (float)color.EffectiveDither(color.PosterizeDither), custom.isDataSRGB ? 1f : 0f, blueNoise.isDataSRGB ? 1f : 0f, 0f));
         }
 
         // Applied by whichever pass owns the final color treatment; the other one receives zeros.
@@ -166,7 +168,7 @@ namespace RetroPSX.Rendering
                 material.SetVectorArray(RetroPSXShaderIDs.PaletteLinear, linear);
                 material.SetVectorArray(RetroPSXShaderIDs.PaletteOklab, oklab);
                 material.SetVector(RetroPSXShaderIDs.PaletteParams, new Vector4(
-                    count, color.PaletteStrength, (float)color.PaletteDither, color.PaletteDitherStrength));
+                    count, color.PaletteStrength, (float)color.EffectiveDither(color.PaletteDither), color.PaletteDitherStrength));
             }
             else
                 material.SetVector(RetroPSXShaderIDs.PaletteParams, Vector4.zero);
@@ -213,7 +215,7 @@ namespace RetroPSX.Rendering
             RetroColorProfile color = profile.Color;
             volumetricCompositeMaterial.SetVector(RetroPSXShaderIDs.FinalColorParams, new Vector4(
                 applyFinalColor && color.QuantizeFinalImage ? 1f : 0f,
-                (float)color.FinalImageDither,
+                (float)color.EffectiveDither(color.FinalImageDither),
                 color.FinalImageDitherStrength,
                 0f));
             ConfigureDitherTextures(volumetricCompositeMaterial, color);

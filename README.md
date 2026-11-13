@@ -61,7 +61,9 @@ In the Color profile, **Material Precision** controls the existing PSX material 
 
 Create a palette from **Assets > Create > RetroPSX > Profiles > Palette**, then assign it under **Palette Mapping**. Edit swatches or hex values directly, or preview an import before replacing or appending colors. PNG import scans unique RGB values from left to right and top to bottom, skipping fully transparent pixels. HEX import accepts one `RRGGBB` or `#RRGGBB` per line. Imports keep the first occurrence of each color and report palettes above the 64-color limit.
 
-For an industrial look, try **RGB555** material precision, **Luminance** at six levels, and a full-strength palette of `101413 242D2B 414C43 68745D A5A184 D6CBB0` with **Bayer 4×4** at 0.65 dither strength.
+Dither patterns are ordered thresholds tiled on the internal pixel grid: Bayer 4×4 repeats every 4×4 internal pixels. **Blue Noise** uses the built-in 64×64 blue-noise texture unless you assign your own; **Custom** needs a threshold texture (red channel, sRGB off, Point filtering) and is skipped without one. Final Image Precision tiles texture patterns the same way. Only the last active artistic stage dithers: while Palette Mapping runs, Posterize dither is kept but not applied. Partial strength mixes with the incoming color, HDR values included, so effects fade in continuously from 0.
+
+The palette **Create** menu offers example palettes (Olive, Indigo, Rust, Green, Grayscale). For an olive look, try **RGB555** material precision, **Luminance** at six levels, and a full-strength palette of `101413 242D2B 414C43 68745D A5A184 D6CBB0` with **Bayer 4×4** at 0.65 dither strength.
 
 Final-image precision, posterization, and palette mapping run in that order after atmosphere and before presentation, CRT, Native UI, and URP post-processing. Those later stages can change the displayed colors. **Full Pipeline** previews artistic color in Scene View. RGBA targets keep their alpha, and fully transparent texels skip artistic processing.
 

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -10,13 +9,16 @@ namespace RetroPSX.Editor
     {
         private const int PreviewWidth = 96;
         private const int PreviewRowHeight = 6;
+        private const float NarrowWidth = 330f;
+        private const string PreviewFoldoutKey = "RetroPSX.ColorProfile.Preview";
 
         private static readonly string[] ExamplePalettes =
         {
-            "Industrial Horror", "101413 242D2B 414C43 68745D A5A184 D6CBB0",
-            "Night", "0B0D19 1C2338 343E60 656F8F 999BB8 D9D6E4",
+            "Olive", "101413 242D2B 414C43 68745D A5A184 D6CBB0",
+            "Indigo", "0B0D19 1C2338 343E60 656F8F 999BB8 D9D6E4",
             "Rust", "181411 39251F 70432F A86A43 CF9A65 EBD5AB",
-            "Monochrome", "171A18 414A40 858C72 D8D6B5"
+            "Green", "171A18 414A40 858C72 D8D6B5",
+            "Grayscale", "000000 404040 808080 BFBFBF FFFFFF"
         };
 
         private Texture2D preview;
@@ -33,65 +35,70 @@ namespace RetroPSX.Editor
             serializedObject.Update();
             var profile = (RetroColorProfile)target;
             bool single = targets.Length == 1;
-            if (single)
-                DrawPipelineSummary(profile);
 
             RetroColorEditorGUI.Section("Material Color Precision");
-            SerializedProperty mode = Property("mode", "Color Mode", "Per-channel bit depth used by RetroPSX materials (PSX vertex/texture color precision).");
+            SerializedProperty mode = Property("mode", "Color Mode", "Per-channel bit depth used by RetroPSX materials.");
             if (mode.hasMultipleDifferentValues || mode.enumValueIndex == (int)RetroColorMode.Custom)
-                Property("customBits", "Custom Bits", "Bits per channel (1-8) for Custom mode.");
-            SerializedProperty materialDither = Property("materialDither", "Material Dither", "Dither applied by RetroPSX materials before their precision quantization.");
-            if (materialDither.hasMultipleDifferentValues || materialDither.enumValueIndex != (int)RetroDitherMode.Off)
+                Property("customBits", "Custom Bits", "Bits per channel (1-8).");
+            SerializedProperty materialDither = Property("materialDither", "Material Dither", "Dither applied by RetroPSX materials before their quantization. Materials support PSX and Bayer patterns.");
+            if (Differs(materialDither) || materialDither.enumValueIndex != (int)RetroDitherMode.Off)
                 Property("materialDitherStrength", "Dither Strength", "Legacy amplitude scale (0-2).");
+            if (single && profile.MaterialDither is RetroDitherMode.Custom or RetroDitherMode.BlueNoise)
+                RetroColorEditorGUI.InfoLine("Materials only support PSX and Bayer patterns: no material dither is applied.", "triangle-exclamation-point");
 
             RetroColorEditorGUI.Section("Final Image Precision");
-            SerializedProperty quantize = Property("quantizeFinalImage", "Quantize Final Image", "Legacy: quantizes the whole final image (plain URP materials included) with the Color Mode bit depth.");
-            if (quantize.hasMultipleDifferentValues || quantize.boolValue)
+            bool colorModeOff = !mode.hasMultipleDifferentValues && mode.enumValueIndex == (int)RetroColorMode.Off;
+            SerializedProperty quantize = Property("quantizeFinalImage", "Enabled", "Quantizes the whole image (plain URP materials included) with the Color Mode bit depth, before the artistic stages.");
+            if (Differs(quantize) || quantize.boolValue)
             {
-                SerializedProperty finalDither = Property("finalImageDither", "Dither", "Legacy final-image dither, scaled for RGB bit quantization.");
-                if (finalDither.hasMultipleDifferentValues || finalDither.enumValueIndex != (int)RetroDitherMode.Off)
-                    Property("finalImageDitherStrength", "Dither Strength", "Legacy amplitude scale (0-2).");
-                if (single && profile.Mode == RetroColorMode.Off)
-                    RetroColorEditorGUI.InfoLine("Color Mode is Off, so Final Image Precision has no effect.", "triangle-exclamation-point");
+                using (new EditorGUI.DisabledScope(colorModeOff))
+                {
+                    SerializedProperty finalDither = Property("finalImageDither", "Dither", "Legacy dither, scaled for RGB bit quantization.");
+                    if (Differs(finalDither) || finalDither.enumValueIndex != (int)RetroDitherMode.Off)
+                        Property("finalImageDitherStrength", "Dither Strength", "Legacy amplitude scale (0-2).");
+                }
+                if (colorModeOff)
+                    RetroColorEditorGUI.InfoLine("Needs a Color Mode: no effect while Color Mode is Off.", "triangle-exclamation-point");
             }
 
-            RetroColorEditorGUI.Section("Artistic Posterization");
-            SerializedProperty posterize = Property("posterizeMode", "Mode", "RGB: each channel gets N levels. Luminance: brightness gets N levels while hue and saturation are kept where the gamut allows.");
-            if (posterize.hasMultipleDifferentValues || posterize.enumValueIndex != (int)RetroPosterizeMode.Off)
+            RetroColorEditorGUI.Section("Posterization");
+            SerializedProperty posterize = Property("posterizeMode", "Mode", "RGB: N levels per channel (up to N³ colors). Luminance: N brightness levels, hue and saturation kept where the gamut allows.");
+            if (Differs(posterize) || posterize.enumValueIndex != (int)RetroPosterizeMode.Off)
             {
                 IntSlider("posterizeLevels", "Levels", "Exact number of levels (2-64), not limited to powers of two.");
-                Property("posterizeStrength", "Strength", "0 bypasses, 1 is full posterization; values in between mix with the original.");
-                SerializedProperty posterizeDither = Property("posterizeDither", "Dither", "Ordered dither between adjacent levels, in internal-resolution pixels.");
-                if (posterizeDither.hasMultipleDifferentValues || posterizeDither.enumValueIndex != (int)RetroDitherMode.Off)
-                    Property("posterizeDitherStrength", "Dither Strength", "0 rounds to the nearest level, 1 distributes pixels fully between the two levels.");
-                if (single)
-                    DrawPosterizeInfo(profile);
+                Property("posterizeStrength", "Strength", "0 bypasses, 1 is full posterization; values in between mix with the incoming color.");
+                bool paletteOwnsDither = single && profile.PaletteActive;
+                string ownedTooltip = paletteOwnsDither ? " Disabled: Palette Mapping is active and dithers instead (the value is kept)." : string.Empty;
+                using (new EditorGUI.DisabledScope(paletteOwnsDither))
+                {
+                    SerializedProperty posterizeDither = Property("posterizeDither", "Dither", "Ordered dither between adjacent levels, in internal-resolution pixels." + ownedTooltip);
+                    if (Differs(posterizeDither) || posterizeDither.enumValueIndex != (int)RetroDitherMode.Off)
+                        Property("posterizeDitherStrength", "Dither Strength", "0 rounds to the nearest level, 1 distributes pixels fully between the two levels." + ownedTooltip);
+                }
+                if (paletteOwnsDither && profile.PosterizeDither != RetroDitherMode.Off)
+                    RetroColorEditorGUI.InfoLine("Dithered by Palette Mapping.");
             }
 
             RetroColorEditorGUI.Section("Palette Mapping");
-            SerializedProperty paletteEnabled = Property("paletteEnabled", "Enabled", "Remaps every pixel of the final image to the nearest palette color (OKLab).");
-            if (paletteEnabled.hasMultipleDifferentValues || paletteEnabled.boolValue)
+            SerializedProperty paletteEnabled = Property("paletteEnabled", "Enabled", "Maps every pixel to the nearest palette color (OKLab). URP post-processing, CRT and UI run later and can change displayed colors.");
+            if (Differs(paletteEnabled) || paletteEnabled.boolValue)
             {
                 DrawPaletteField(single);
-                Property("paletteStrength", "Strength", "0 bypasses, 1 outputs only palette colors; values in between mix with the original.");
+                Property("paletteStrength", "Strength", "0 bypasses; 1 outputs only palette colors at this stage; values in between mix with the incoming color.");
                 SerializedProperty paletteDither = Property("paletteDither", "Dither", "Ordered dither between two palette colors; never adds off-palette colors.");
-                if (paletteDither.hasMultipleDifferentValues || paletteDither.enumValueIndex != (int)RetroDitherMode.Off)
+                if (Differs(paletteDither) || paletteDither.enumValueIndex != (int)RetroDitherMode.Off)
                     Property("paletteDitherStrength", "Dither Strength", "0 uses the nearest color only, 1 distributes pixels fully between the two colors.");
                 if (single)
-                    DrawPaletteInfo(profile);
+                    DrawPaletteWarning(profile.Palette);
             }
 
-            if (UsesTexturePattern())
-            {
-                RetroColorEditorGUI.Section("Dither Textures");
-                Property("customPattern", "Custom Pattern", "Threshold texture for Custom dither. Import it with sRGB off and Point filtering; artistic stages tile it per internal pixel.");
-                Property("blueNoise", "Blue Noise", "Threshold texture for Blue Noise dither. Import it with sRGB off; artistic stages tile it per internal pixel.");
-            }
-
+            DrawDitherTextures(profile, single);
             serializedObject.ApplyModifiedProperties();
             if (single && (profile.PosterizeActive || profile.PaletteActive))
                 DrawPreview(profile);
         }
+
+        private static bool Differs(SerializedProperty property) => property.hasMultipleDifferentValues;
 
         private SerializedProperty Property(string name, string label, string tooltip)
         {
@@ -106,80 +113,74 @@ namespace RetroPSX.Editor
             EditorGUILayout.IntSlider(property, RetroColorProfile.MinPosterizeLevels, RetroColorProfile.MaxPosterizeLevels, new GUIContent(label, tooltip));
         }
 
-        private bool UsesTexturePattern()
+        // A texture field is shown only when a stage that is actually running uses its pattern. Hidden
+        // textures stay assigned.
+        private void DrawDitherTextures(RetroColorProfile profile, bool single)
         {
-            foreach (string name in new[] { "finalImageDither", "posterizeDither", "paletteDither" })
+            bool multi = !single;
+            bool custom = multi || StageUses(profile, RetroDitherMode.Custom);
+            bool blueNoise = multi || StageUses(profile, RetroDitherMode.BlueNoise);
+            if (!custom && !blueNoise)
+                return;
+
+            RetroColorEditorGUI.Section("Dither Textures");
+            if (custom)
             {
-                SerializedProperty property = serializedObject.FindProperty(name);
-                if (property.hasMultipleDifferentValues || property.enumValueIndex == (int)RetroDitherMode.Custom || property.enumValueIndex == (int)RetroDitherMode.BlueNoise)
-                    return true;
+                Property("customPattern", "Custom Pattern", "Threshold texture tiled per internal pixel (red channel). Import it with sRGB off, Point filtering and no compression.");
+                if (single && profile.CustomPattern == null)
+                    RetroColorEditorGUI.InfoLine("No texture: Custom dither is skipped.", "triangle-exclamation-point");
             }
-            return serializedObject.FindProperty("customPattern").objectReferenceValue != null
-                || serializedObject.FindProperty("blueNoise").objectReferenceValue != null;
-        }
-
-        private static void DrawPipelineSummary(RetroColorProfile profile)
-        {
-            var stages = new List<string>();
-            if (profile.Mode != RetroColorMode.Off)
-                stages.Add($"Materials {ModeName(profile)}");
-            if (profile.FinalImagePrecisionActive)
-                stages.Add($"Final {ModeName(profile)}");
-            if (profile.PosterizeActive)
-                stages.Add($"{profile.PosterizeMode} Posterize {profile.PosterizeLevels}");
-            if (profile.PaletteActive)
-                stages.Add($"Palette {profile.Palette.Count}");
-            string text = stages.Count == 0 ? "No color stage is active." : "Active color stages: " + string.Join(" → ", stages);
-            RetroColorEditorGUI.InfoLine(text);
-            if (profile.FinalImagePrecisionActive && (profile.PosterizeActive || profile.PaletteActive))
-                RetroColorEditorGUI.InfoLine("Final Image Precision runs first; the artistic stages then process its quantized result.", "triangle-exclamation-point");
-        }
-
-        private static string ModeName(RetroColorProfile profile)
-        {
-            Vector3Int bits = profile.Bits;
-            return profile.Mode == RetroColorMode.Custom ? $"Custom {bits.x}{bits.y}{bits.z}" : profile.Mode.ToString();
-        }
-
-        private static void DrawPosterizeInfo(RetroColorProfile profile)
-        {
-            int levels = profile.PosterizeLevels;
-            if (profile.PosterizeMode == RetroPosterizeMode.RGB)
+            if (blueNoise)
             {
-                long combinations = (long)levels * levels * levels;
-                RetroColorEditorGUI.InfoLine($"RGB Posterize: {levels} levels per channel, up to {combinations:N0} RGB combinations (not a {levels}-color palette).");
+                Property("blueNoise", "Blue Noise", "Optional override. When empty, the built-in 64×64 blue-noise texture is used.");
+                if (single && profile.BlueNoise == null)
+                {
+                    Texture2D fallback = RetroColorProfile.DefaultBlueNoise;
+                    RetroColorEditorGUI.InfoLine(fallback != null ? $"Default · {fallback.width}×{fallback.height}" : "Built-in blue noise is missing: Blue Noise dither is skipped.",
+                        fallback != null ? null : "triangle-exclamation-point");
+                }
             }
-            else
-                RetroColorEditorGUI.InfoLine($"Luminance Posterize: {levels} brightness levels; hue and saturation are kept where the gamut allows.");
-            if (profile.PosterizeStrength < 1f)
-                RetroColorEditorGUI.InfoLine("Partial strength mixes with the original, so more than the listed levels appear.");
-            if (profile.PosterizeDither != RetroDitherMode.Off && profile.PaletteActive)
-                RetroColorEditorGUI.InfoLine("Posterize dither is off while Palette Mapping is active: the palette stage dithers.", "triangle-exclamation-point");
+        }
+
+        private static bool StageUses(RetroColorProfile profile, RetroDitherMode pattern)
+        {
+            return (profile.FinalImagePrecisionActive && profile.FinalImageDither == pattern)
+                || (profile.PosterizeActive && !profile.PaletteActive && profile.PosterizeDither == pattern)
+                || (profile.PaletteEnabled && profile.PaletteStrength > 0f && profile.PaletteDither == pattern);
         }
 
         private void DrawPaletteField(bool single)
         {
             SerializedProperty palette = serializedObject.FindProperty("palette");
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.PropertyField(palette, new GUIContent("Palette", "A reusable Retro Palette Profile asset."));
-                using (new EditorGUI.DisabledScope(palette.objectReferenceValue == null || palette.hasMultipleDifferentValues))
-                    if (RetroColorEditorGUI.IconButton("locate", "Ping the palette asset"))
-                        EditorGUIUtility.PingObject(palette.objectReferenceValue);
-                using (new EditorGUI.DisabledScope(!single))
-                    if (RetroColorEditorGUI.IconButton("plus", "Create a palette asset"))
-                        ShowCreateMenu(palette);
-            }
+            var content = new GUIContent("Palette", "A reusable Retro Palette Profile asset.");
+            const float buttons = 2f * 22f + 2f;
+            bool narrow = EditorGUIUtility.currentViewWidth < NarrowWidth;
+            Rect row = EditorGUILayout.GetControlRect(true, EditorGUIUtility.singleLineHeight);
+            Rect field = row;
+            if (!narrow)
+                field.xMax -= buttons;
+            EditorGUI.PropertyField(field, palette, content);
+            Rect icons = narrow ? EditorGUI.IndentedRect(EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight)) : row;
+            var create = new Rect(icons.xMax - 20f, icons.y, 20f, icons.height);
+            var ping = new Rect(create.x - 24f, icons.y, 20f, icons.height);
+            using (new EditorGUI.DisabledScope(palette.objectReferenceValue == null || palette.hasMultipleDifferentValues))
+                if (RetroColorEditorGUI.IconButton(ping, "locate", "Ping the palette asset"))
+                    EditorGUIUtility.PingObject(palette.objectReferenceValue);
+            using (new EditorGUI.DisabledScope(!single))
+                if (RetroColorEditorGUI.IconButton(create, "plus", "Create a palette asset"))
+                    ShowCreateMenu();
+
             if (single && palette.objectReferenceValue is RetroPaletteProfile asset && asset.Count > 0)
             {
-                Rect strip = EditorGUILayout.GetControlRect(false, 14f);
-                strip = EditorGUI.IndentedRect(strip);
-                strip.xMin += EditorGUIUtility.labelWidth;
-                RetroColorEditorGUI.Swatches(strip, asset.GetColors(), 1);
+                Rect strip = EditorGUILayout.GetControlRect(true, 12f);
+                strip.xMin += EditorGUIUtility.labelWidth + 2f;
+                if (!narrow)
+                    strip.xMax -= buttons;
+                RetroColorEditorGUI.Swatches(strip, asset.GetColors(), asset.Count > 32 ? 2 : 1);
             }
         }
 
-        private void ShowCreateMenu(SerializedProperty palette)
+        private void ShowCreateMenu()
         {
             var menu = new GenericMenu();
             menu.AddItem(new GUIContent("Black and White"), false, () => CreatePalette("RetroPaletteProfile", "000000 FFFFFF"));
@@ -210,53 +211,56 @@ namespace RetroPSX.Editor
             serializedObject.ApplyModifiedProperties();
         }
 
-        private static void DrawPaletteInfo(RetroColorProfile profile)
+        private static void DrawPaletteWarning(RetroPaletteProfile palette)
         {
-            RetroPaletteProfile palette = profile.Palette;
             if (palette == null)
-            {
                 EditorGUILayout.HelpBox("No palette assigned: Palette Mapping is skipped.", MessageType.Warning);
-                return;
-            }
-            if (!palette.IsValid)
-            {
+            else if (!palette.IsValid)
                 EditorGUILayout.HelpBox($"The palette has {palette.Count} colors (valid: 1-{RetroPaletteProfile.MaxColors}). Palette Mapping is skipped.", MessageType.Warning);
-                return;
-            }
-            RetroColorEditorGUI.InfoLine($"Palette Mapping: {palette.Count} colors.");
-            RetroColorEditorGUI.InfoLine(profile.PaletteStrength >= 1f
-                ? "Strict palette output applies at 100% strength."
-                : "Below 100% strength the output mixes with the original, so off-palette colors are expected.");
-            RetroColorEditorGUI.InfoLine("URP post-processing (tonemapping, grading, bloom), CRT and UI run later and can change displayed colors.");
         }
 
         private void DrawPreview(RetroColorProfile profile)
         {
-            RetroColorEditorGUI.Section("Preview");
+            EditorGUILayout.Space(6f);
+            bool expanded = SessionState.GetBool(PreviewFoldoutKey, true);
+            bool next = EditorGUILayout.Foldout(expanded, "Preview", true, EditorStyles.foldoutHeader);
+            if (next != expanded)
+                SessionState.SetBool(PreviewFoldoutKey, next);
+            if (!next)
+                return;
+
             string key = PreviewKey(profile);
             if (preview == null || key != previewKey)
             {
                 previewKey = key;
                 BuildPreview(profile);
             }
-            Rect rect = EditorGUILayout.GetControlRect(false, 96f);
-            rect = EditorGUI.IndentedRect(rect);
-            float half = (rect.width - 6f) * 0.5f;
-            var original = new Rect(rect.x, rect.y, half, rect.height);
-            var processed = new Rect(rect.x + half + 6f, rect.y, half, rect.height);
+            const float gap = 6f;
+            // Height from the view width so Layout and Repaint agree; images keep a 2:1 aspect up to 96 px.
+            float imageHeight = Mathf.Clamp((EditorGUIUtility.currentViewWidth - 40f) * 0.25f, 32f, 96f);
+            Rect images = EditorGUI.IndentedRect(EditorGUILayout.GetControlRect(false, imageHeight));
+            float half = Mathf.Max(1f, (images.width - gap) * 0.5f);
+            var original = new Rect(images.x, images.y, half, images.height);
+            var processed = new Rect(images.x + half + gap, images.y, half, images.height);
+            Rect labels = EditorGUI.IndentedRect(EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight));
             if (Event.current.type == EventType.Repaint)
             {
                 GUI.DrawTextureWithTexCoords(original, preview, new Rect(0f, 0f, 0.5f, 1f));
                 GUI.DrawTextureWithTexCoords(processed, preview, new Rect(0.5f, 0f, 0.5f, 1f));
             }
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField("Original", EditorStyles.centeredGreyMiniLabel);
-                EditorGUILayout.LabelField("Artistic stages", EditorStyles.centeredGreyMiniLabel);
-            }
-            if (profile.PaletteDither is RetroDitherMode.Custom or RetroDitherMode.BlueNoise
-                || (profile.PosterizeDitherActive && profile.PosterizeDither is RetroDitherMode.Custom or RetroDitherMode.BlueNoise))
-                RetroColorEditorGUI.InfoLine("Texture dither patterns are previewed without dithering.");
+            GUI.Label(new Rect(original.x, labels.y, original.width, labels.height), "Original", EditorStyles.centeredGreyMiniLabel);
+            GUI.Label(new Rect(processed.x, labels.y, processed.width, labels.height), "Processed", EditorStyles.centeredGreyMiniLabel);
+            if (UsesUnreadablePattern(profile))
+                RetroColorEditorGUI.InfoLine("The dither texture is not CPU-readable: previewed without its pattern.");
+        }
+
+        private static bool UsesUnreadablePattern(RetroColorProfile profile)
+        {
+            RetroDitherMode mode = profile.PaletteActive
+                ? profile.EffectiveDither(profile.PaletteDither)
+                : profile.PosterizeDitherActive ? profile.EffectiveDither(profile.PosterizeDither) : RetroDitherMode.Off;
+            Texture2D pattern = mode == RetroDitherMode.Custom ? profile.CustomPattern : mode == RetroDitherMode.BlueNoise ? profile.EffectiveBlueNoise : null;
+            return pattern != null && !pattern.isReadable;
         }
 
         private static string PreviewKey(RetroColorProfile profile)
@@ -265,14 +269,16 @@ namespace RetroPSX.Editor
             builder.Append(profile.PosterizeMode).Append(profile.PosterizeLevels).Append(profile.PosterizeStrength)
                 .Append(profile.PosterizeDither).Append(profile.PosterizeDitherStrength).Append(profile.PaletteActive)
                 .Append(profile.PaletteStrength).Append(profile.PaletteDither).Append(profile.PaletteDitherStrength)
-                .Append(EditorGUIUtility.isProSkin);
+                .Append(profile.CustomPattern != null ? profile.CustomPattern.GetHashCode() : 0).Append('/')
+                .Append(profile.EffectiveBlueNoise != null ? profile.EffectiveBlueNoise.GetHashCode() : 0);
             if (profile.PaletteActive)
                 foreach (Color color in profile.Palette.GetColors())
                     builder.Append(RetroPaletteImport.ToHex(color));
             return builder.ToString();
         }
 
-        // Rows: gray ramp, hue sweep, dark hue sweep, saturated-to-white ramp. Same math as the shader (RetroPSXColorMath).
+        // Rows: gray ramp, hue sweep, dark hue sweep, saturated-to-white ramp. Same math as the shader
+        // (RetroPSXColorMath), one texel per internal pixel.
         private void BuildPreview(RetroColorProfile profile)
         {
             const int rows = 4;

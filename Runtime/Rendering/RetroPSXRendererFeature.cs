@@ -25,7 +25,7 @@ namespace RetroPSX.Rendering
         public override void Create()
         {
             DestroyMaterials();
-            RetroPSXShaderResources shaders = Resources.Load<RetroPSXShaderResources>(RetroPSXShaderResources.ResourcePath);
+            RetroPSXShaderResources shaders = RetroPSXShaderResources.Instance;
             resolveMaterial = CreateMaterial(shaders != null ? shaders.Resolve : null);
             presentationMaterial = CreateMaterial(shaders != null ? shaders.Presentation : null);
             volumetricMaterial = CreateMaterial(shaders != null ? shaders.Volumetric : null);

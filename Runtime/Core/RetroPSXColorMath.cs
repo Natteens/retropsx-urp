@@ -55,6 +55,20 @@ namespace RetroPSX
             }
         }
 
+        /// <summary>
+        /// Threshold for any mode. Texture patterns tile per pixel like the shader (LOAD, no filtering);
+        /// they need a readable texture on the CPU, otherwise 0.5 (no dither) is returned.
+        /// </summary>
+        public static float DitherThreshold(RetroDitherMode mode, int x, int y, Texture2D pattern)
+        {
+            if (mode is not (RetroDitherMode.Custom or RetroDitherMode.BlueNoise))
+                return DitherThreshold(mode, x, y);
+            if (pattern == null || !pattern.isReadable)
+                return 0.5f;
+            int px = (int)((uint)x % (uint)pattern.width), py = (int)((uint)y % (uint)pattern.height);
+            return Mathf.Clamp(pattern.GetPixel(px, py).r, 1f / 512f, 511f / 512f);
+        }
+
         public static Vector3 FitToDisplayRange(Vector3 linear)
         {
             Vector3 color = Vector3.Max(linear, Vector3.zero);
@@ -153,6 +167,17 @@ namespace RetroPSX
             }
         }
 
+        /// <summary>Ordered choice within the pair, anchored to palette order so the pattern stays continuous where the nearest color flips.</summary>
+        public static int PickPaletteColor(int first, int second, float towardSecond, float threshold)
+        {
+            if (second == first)
+                return first;
+            bool ordered = first < second;
+            float towardHigh = ordered ? towardSecond : 1f - towardSecond;
+            bool high = towardHigh > threshold;
+            return high == ordered ? second : first;
+        }
+
         public static Vector3 MixStrength(Vector3 original, Vector3 processed, float strength)
         {
             if (strength >= 1f)
@@ -160,33 +185,42 @@ namespace RetroPSX
             return SrgbToLinear(Vector3.Lerp(LinearToSrgb(original), LinearToSrgb(processed), strength));
         }
 
-        /// <summary>Artistic stage of the final color for one pixel, with a procedural threshold pattern.</summary>
+        /// <summary>Artistic stage of the final color for one pixel, with the profile's dither patterns.</summary>
         public static Vector3 ApplyArtistic(Vector3 linear, RetroColorProfile profile, int x, int y)
         {
             if (profile == null || (!profile.PosterizeActive && !profile.PaletteActive))
                 return linear;
-            Vector3 color = FitToDisplayRange(linear);
+            Vector3 color = linear;
             bool palette = profile.PaletteActive;
             if (profile.PosterizeActive)
             {
-                RetroDitherMode dither = palette ? RetroDitherMode.Off : profile.PosterizeDither;
+                RetroDitherMode dither = palette ? RetroDitherMode.Off : profile.EffectiveDither(profile.PosterizeDither);
                 float strength = dither != RetroDitherMode.Off ? profile.PosterizeDitherStrength : 0f;
-                float threshold = DitherThreshold(dither, x, y);
+                float threshold = DitherThreshold(dither, x, y, PatternFor(profile, dither));
+                Vector3 fitted = FitToDisplayRange(color);
                 Vector3 posterized = profile.PosterizeMode == RetroPosterizeMode.Luminance
-                    ? PosterizeLuminance(color, profile.PosterizeLevels, threshold, strength)
-                    : PosterizeRgb(color, profile.PosterizeLevels, threshold, strength);
+                    ? PosterizeLuminance(fitted, profile.PosterizeLevels, threshold, strength)
+                    : PosterizeRgb(fitted, profile.PosterizeLevels, threshold, strength);
                 color = MixStrength(color, posterized, profile.PosterizeStrength);
             }
             if (palette)
             {
                 profile.Palette.TryGetShaderData(out int count, out Vector4[] paletteLinear, out Vector4[] paletteOklab);
-                float ditherStrength = profile.PaletteDither != RetroDitherMode.Off ? profile.PaletteDitherStrength : 0f;
-                FindPalettePair(LinearToOklab(color), paletteOklab, count, ditherStrength > 0f, out int first, out int second, out float t);
-                int chosen = t * ditherStrength > DitherThreshold(profile.PaletteDither, x, y) ? second : first;
+                RetroDitherMode dither = profile.EffectiveDither(profile.PaletteDither);
+                float ditherStrength = dither != RetroDitherMode.Off ? profile.PaletteDitherStrength : 0f;
+                FindPalettePair(LinearToOklab(FitToDisplayRange(color)), paletteOklab, count, ditherStrength > 0f, out int first, out int second, out float t);
+                int chosen = PickPaletteColor(first, second, t * ditherStrength, DitherThreshold(dither, x, y, PatternFor(profile, dither)));
                 color = MixStrength(color, paletteLinear[chosen], profile.PaletteStrength);
             }
             return color;
         }
+
+        private static Texture2D PatternFor(RetroColorProfile profile, RetroDitherMode mode) => mode switch
+        {
+            RetroDitherMode.Custom => profile.CustomPattern,
+            RetroDitherMode.BlueNoise => profile.EffectiveBlueNoise,
+            _ => null
+        };
 
         private static Vector3 Saturate(Vector3 v) => new(Mathf.Clamp01(v.x), Mathf.Clamp01(v.y), Mathf.Clamp01(v.z));
     }

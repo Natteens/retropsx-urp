@@ -198,6 +198,111 @@ namespace RetroPSX.Tests
             finally { Object.DestroyImmediate(profile); Object.DestroyImmediate(palette); }
         }
 
+        [TestCase(Resolve)]
+        [TestCase(Composite)]
+        public void FinalImageTexturePatternTilesPerInternalPixel(string shader)
+        {
+            // A 4x1 pattern must repeat every 4 pixels (it used to be stretched over the whole image).
+            var pattern = new Texture2D(4, 1, TextureFormat.R8, false, true) { filterMode = FilterMode.Point };
+            pattern.SetPixels32(new[] { new Color32(0, 0, 0, 255), new Color32(64, 0, 0, 255), new Color32(128, 0, 0, 255), new Color32(192, 0, 0, 255) });
+            pattern.Apply();
+            try
+            {
+                float value = RetroPSXColorMath.SrgbToLinear(0.495f);
+                var input = new Color[Width * Height];
+                for (int index = 0; index < input.Length; index++)
+                    input[index] = new Color(value, value, value, 1f);
+                Color[] output = Render(shader, input, m =>
+                {
+                    m.SetVector("_RetroPSXColorBits", new Vector4(1, 1, 1, 1));
+                    m.SetVector("_RetroFinalColorParams", new Vector4(1, (float)RetroDitherMode.Custom, 2f, 0));
+                    m.SetTexture("_RetroCustomDither", pattern);
+                    m.SetVector("_RetroArtisticDitherSize", new Vector4(4, 1, 1, 1));
+                });
+                for (int y = 0; y < Height; y++)
+                for (int x = 0; x < Width; x++)
+                    Assert.That(output[y * Width + x].r, Is.EqualTo(x % 4 == 3 ? 1f : 0f).Within(1e-4f), $"pixel ({x},{y})");
+            }
+            finally { Object.DestroyImmediate(pattern); }
+        }
+
+        [TestCase(Resolve)]
+        [TestCase(Composite)]
+        public void DefaultBlueNoisePaletteDitherStaysInPaletteAndFollowsTheMixFactor(string shader)
+        {
+            RetroPaletteProfile palette = RetroPSXArtisticColorTests.Palette("000000", "808080", "FFFFFF");
+            RetroColorProfile profile = RetroPSXArtisticColorTests.Profile(p =>
+            {
+                p.FindProperty("paletteEnabled").boolValue = true;
+                p.FindProperty("palette").objectReferenceValue = palette;
+                p.FindProperty("paletteDither").enumValueIndex = (int)RetroDitherMode.BlueNoise;
+            });
+            try
+            {
+                Texture2D noise = profile.EffectiveBlueNoise;
+                Assert.That(noise, Is.Not.Null);
+                float value = RetroPSXColorMath.SrgbToLinear(0.62f);
+                var input = new Color[Width * Height];
+                for (int index = 0; index < input.Length; index++)
+                    input[index] = new Color(value, value, value, 1f);
+                Color[] output = Render(shader, input, m =>
+                {
+                    Configure(m, profile);
+                    m.SetTexture("_RetroBlueNoise", noise);
+                    m.SetVector("_RetroArtisticDitherSize", new Vector4(1, 1, noise.width, noise.height));
+                });
+                palette.TryGetShaderData(out int count, out Vector4[] linear, out Vector4[] oklab);
+                RetroPSXColorMath.FindPalettePair(RetroPSXColorMath.LinearToOklab(Vector3.one * value), oklab, count, true, out _, out int second, out float t);
+                int alternate = 0;
+                foreach (Color color in output)
+                {
+                    int match = Array.FindIndex(linear, 0, count, c => Mathf.Abs(c.x - color.r) < 1e-5f && Mathf.Abs(c.z - color.b) < 1e-5f);
+                    Assert.That(match, Is.GreaterThanOrEqualTo(0), $"Off-palette pixel {color}.");
+                    if (match == second) alternate++;
+                }
+                // 512 pixels of a 64x64 tile: blue noise holds the ratio closely even on a partial tile.
+                Assert.That(alternate / (float)output.Length, Is.EqualTo(t).Within(0.06f));
+            }
+            finally { Object.DestroyImmediate(profile); Object.DestroyImmediate(palette); }
+        }
+
+        [Test]
+        public void ShaderMatchesCpuMirrorWithOrderedPaletteDither()
+        {
+            RetroPaletteProfile palette = RetroPSXArtisticColorTests.Palette("101413", "242D2B", "414C43", "68745D", "A5A184", "D6CBB0");
+            RetroColorProfile profile = RetroPSXArtisticColorTests.Profile(p =>
+            {
+                p.FindProperty("posterizeMode").enumValueIndex = (int)RetroPosterizeMode.RGB;
+                p.FindProperty("posterizeLevels").intValue = 12;
+                p.FindProperty("paletteEnabled").boolValue = true;
+                p.FindProperty("palette").objectReferenceValue = palette;
+                p.FindProperty("paletteDither").enumValueIndex = (int)RetroDitherMode.Bayer4x4;
+            });
+            try
+            {
+                Color[] input = Gradient();
+                Color[] output = Render(Resolve, input, m => Configure(m, profile));
+                // Readback rows may be flipped relative to SV_Position: accept either orientation, but every pixel must match one.
+                int bestMismatches = int.MaxValue;
+                foreach (bool flipped in new[] { false, true })
+                {
+                    int mismatches = 0;
+                    for (int y = 0; y < Height; y++)
+                    for (int x = 0; x < Width; x++)
+                    {
+                        Color source = input[y * Width + x];
+                        Vector3 expected = RetroPSXColorMath.ApplyArtistic(new Vector3(source.r, source.g, source.b), profile, x, flipped ? Height - 1 - y : y);
+                        Color actual = output[y * Width + x];
+                        if (Vector3.Distance(expected, new Vector3(actual.r, actual.g, actual.b)) > 1e-4f)
+                            mismatches++;
+                    }
+                    bestMismatches = Mathf.Min(bestMismatches, mismatches);
+                }
+                Assert.That(bestMismatches, Is.LessThanOrEqualTo(input.Length / 100), "GPU dither pattern and CPU mirror disagree.");
+            }
+            finally { Object.DestroyImmediate(profile); Object.DestroyImmediate(palette); }
+        }
+
         static void Configure(Material material, RetroColorProfile profile)
         {
             material.SetVector("_RetroPosterizeParams", profile.PosterizeActive

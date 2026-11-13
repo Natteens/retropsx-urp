@@ -283,6 +283,188 @@ namespace RetroPSX.Tests
             Assert.That((int)RetroPosterizeMode.Luminance, Is.EqualTo(2));
         }
 
+        [Test]
+        public void DefaultBlueNoiseIsUniformLinearPointData()
+        {
+            Texture2D noise = RetroColorProfile.DefaultBlueNoise;
+            Assert.That(noise, Is.Not.Null, "The package must ship a default blue-noise texture.");
+            Assert.That(noise.width, Is.EqualTo(64));
+            Assert.That(noise.height, Is.EqualTo(64));
+            Assert.That(noise.isDataSRGB, Is.False);
+            Assert.That(noise.filterMode, Is.EqualTo(FilterMode.Point));
+            Assert.That(noise.mipmapCount, Is.EqualTo(1));
+            Assert.That(noise.isReadable, Is.True);
+            Color32[] texels = noise.GetPixels32();
+            var histogram = new int[256];
+            foreach (Color32 texel in texels)
+                histogram[texel.r]++;
+            foreach (int count in histogram)
+                Assert.That(count, Is.EqualTo(16), "Thresholds must be uniformly distributed (uncompressed).");
+
+            // Blue noise keeps the darkest quarter apart; white noise would put ~25% of them next to each other.
+            int ones = 0, adjacent = 0;
+            for (int y = 0; y < 64; y++)
+            for (int x = 0; x < 64; x++)
+            {
+                if (texels[y * 64 + x].r >= 64)
+                    continue;
+                ones++;
+                if (texels[y * 64 + (x + 1) % 64].r < 64)
+                    adjacent++;
+            }
+            Assert.That(adjacent, Is.LessThan(ones * 0.15f));
+        }
+
+        [Test]
+        public void BlueNoiseWithoutTextureUsesTheDefaultAndCustomWithoutTextureIsSkipped()
+        {
+            RetroColorProfile profile = Profile(p =>
+            {
+                p.FindProperty("posterizeMode").enumValueIndex = (int)RetroPosterizeMode.RGB;
+                p.FindProperty("posterizeLevels").intValue = 2;
+                p.FindProperty("posterizeDither").enumValueIndex = (int)RetroDitherMode.Custom;
+            });
+            try
+            {
+                Assert.That(profile.EffectiveBlueNoise, Is.SameAs(RetroColorProfile.DefaultBlueNoise));
+                Assert.That(profile.EffectiveDither(RetroDitherMode.BlueNoise), Is.EqualTo(RetroDitherMode.BlueNoise));
+                Assert.That(profile.EffectiveDither(RetroDitherMode.Custom), Is.EqualTo(RetroDitherMode.Off));
+                Assert.That(profile.PosterizeDitherActive, Is.False, "Custom without a texture must not dither.");
+                Assert.That(profile.EffectiveDither(RetroDitherMode.Bayer4x4), Is.EqualTo(RetroDitherMode.Bayer4x4));
+
+                // Blue noise really dithers: a flat value between two levels gets both at the expected ratio.
+                var serialized = new SerializedObject(profile);
+                serialized.FindProperty("posterizeDither").enumValueIndex = (int)RetroDitherMode.BlueNoise;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                float value = RetroPSXColorMath.SrgbToLinear(0.3f);
+                int high = 0;
+                for (int y = 0; y < 64; y++)
+                for (int x = 0; x < 64; x++)
+                    if (RetroPSXColorMath.ApplyArtistic(Vector3.one * value, profile, x, y).x > 0.5f)
+                        high++;
+                Assert.That(high / 4096f, Is.EqualTo(0.3f).Within(0.01f));
+            }
+            finally { Object.DestroyImmediate(profile); }
+        }
+
+        [Test]
+        public void PaletteDitherPatternIsContinuousWhereTheNearestColorFlips()
+        {
+            RetroPaletteProfile palette = Palette("000000", "FFFFFF");
+            RetroColorProfile profile = Profile(p =>
+            {
+                p.FindProperty("paletteEnabled").boolValue = true;
+                p.FindProperty("palette").objectReferenceValue = palette;
+                p.FindProperty("paletteDither").enumValueIndex = (int)RetroDitherMode.Bayer4x4;
+            });
+            try
+            {
+                palette.TryGetShaderData(out int count, out _, out Vector4[] oklab);
+                float low = 0f, high = 1f;
+                for (int step = 0; step < 40; step++)
+                {
+                    float mid = (low + high) * 0.5f;
+                    RetroPSXColorMath.FindPalettePair(RetroPSXColorMath.LinearToOklab(Vector3.one * mid), oklab, count, false, out int nearest, out _, out _);
+                    if (nearest == 0) low = mid; else high = mid;
+                }
+                Vector3 below = Vector3.one * (low * 0.999f), above = Vector3.one * (high * 1.001f);
+                for (int y = 0; y < 4; y++)
+                for (int x = 0; x < 4; x++)
+                    Assert.That(RetroPSXColorMath.ApplyArtistic(above, profile, x, y), Is.EqualTo(RetroPSXColorMath.ApplyArtistic(below, profile, x, y)),
+                        $"Pattern inverts at ({x},{y}) where the nearest color flips.");
+            }
+            finally { Object.DestroyImmediate(profile); Object.DestroyImmediate(palette); }
+        }
+
+        [TestCase(RetroDitherMode.Bayer4x4)]
+        [TestCase(RetroDitherMode.BlueNoise)]
+        [TestCase(RetroDitherMode.PSX)]
+        public void PaletteDitherKeepsExactPaletteColorsAndSupportsOneAndSixtyFourColors(RetroDitherMode dither)
+        {
+            var hex = new string[RetroPaletteProfile.MaxColors];
+            for (int index = 0; index < hex.Length; index++)
+                hex[index] = ColorUtility.ToHtmlStringRGB(Color.HSVToRGB(index / 64f, 0.3f + 0.7f * (index % 4) / 3f, 0.15f + 0.85f * (index % 8) / 7f));
+            RetroPaletteProfile full = Palette(hex), single = Palette("68745D");
+            RetroColorProfile profile = Profile(p =>
+            {
+                p.FindProperty("paletteEnabled").boolValue = true;
+                p.FindProperty("palette").objectReferenceValue = full;
+                p.FindProperty("paletteDither").enumValueIndex = (int)dither;
+            });
+            try
+            {
+                full.TryGetShaderData(out int count, out Vector4[] linear, out _);
+                Assert.That(count, Is.EqualTo(64));
+                for (int index = 0; index < count; index++)
+                for (int y = 0; y < 8; y++)
+                for (int x = 0; x < 8; x++)
+                    Assert.That(RetroPSXColorMath.ApplyArtistic(linear[index], profile, x * 7, y * 5), Is.EqualTo((Vector3)linear[index]),
+                        $"Palette color {index} changed by dithering.");
+                var random = new System.Random(5);
+                for (int sample = 0; sample < 512; sample++)
+                {
+                    var input = new Vector3((float)random.NextDouble(), (float)random.NextDouble(), (float)random.NextDouble());
+                    Vector3 result = RetroPSXColorMath.ApplyArtistic(input, profile, sample, sample / 3);
+                    Assert.That(Array.Exists(linear, c => (Vector3)c == result), Is.True, $"Off-palette output {result}");
+                }
+
+                var serialized = new SerializedObject(profile);
+                serialized.FindProperty("palette").objectReferenceValue = single;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                single.TryGetShaderData(out _, out Vector4[] one, out _);
+                for (int sample = 0; sample < 64; sample++)
+                    Assert.That(RetroPSXColorMath.ApplyArtistic(new Vector3(sample / 63f, 0.5f, 1f - sample / 63f), profile, sample, sample), Is.EqualTo((Vector3)one[0]));
+            }
+            finally { Object.DestroyImmediate(profile); Object.DestroyImmediate(full); Object.DestroyImmediate(single); }
+        }
+
+        [TestCase("posterizeStrength")]
+        [TestCase("paletteStrength")]
+        public void StrengthNearZeroFadesInContinuouslyFromHdrInput(string strength)
+        {
+            RetroPaletteProfile palette = Palette("101413", "D6CBB0");
+            RetroColorProfile profile = Profile(p =>
+            {
+                p.FindProperty("posterizeMode").enumValueIndex = strength == "posterizeStrength" ? (int)RetroPosterizeMode.RGB : 0;
+                p.FindProperty("paletteEnabled").boolValue = strength == "paletteStrength";
+                p.FindProperty("palette").objectReferenceValue = palette;
+            });
+            var hdr = new Vector3(4f, 2f, 0.5f);
+            try
+            {
+                SetProperty(profile, strength, 0f);
+                Assert.That(RetroPSXColorMath.ApplyArtistic(hdr, profile, 0, 0), Is.EqualTo(hdr), "Strength 0 must bypass.");
+                Vector3 previous = hdr;
+                foreach (float value in new[] { 0.001f, 0.01f, 0.1f, 0.5f, 1f })
+                {
+                    SetProperty(profile, strength, value);
+                    Vector3 result = RetroPSXColorMath.ApplyArtistic(hdr, profile, 0, 0);
+                    if (value <= 0.001f)
+                        Assert.That(Vector3.Distance(result, hdr), Is.LessThan(0.02f), $"No jump at strength {value}.");
+                    Assert.That(result.x, Is.LessThanOrEqualTo(previous.x + 1e-5f), "Monotonic toward the processed color.");
+                    previous = result;
+                }
+                Assert.That(previous.x, Is.LessThanOrEqualTo(1f + 1e-5f), "Full strength stays in display range.");
+            }
+            finally { Object.DestroyImmediate(profile); Object.DestroyImmediate(palette); }
+        }
+
+        [TestCase(RetroDitherMode.Bayer2x2, 2)]
+        [TestCase(RetroDitherMode.Bayer4x4, 4)]
+        [TestCase(RetroDitherMode.PSX, 4)]
+        [TestCase(RetroDitherMode.BlueNoise, 64)]
+        public void DitherThresholdsAreDeterministicAndTileWithTheirPeriod(RetroDitherMode mode, int period)
+        {
+            Texture2D noise = RetroColorProfile.DefaultBlueNoise;
+            for (int y = 0; y < period; y++)
+            for (int x = 0; x < period; x++)
+            {
+                float threshold = RetroPSXColorMath.DitherThreshold(mode, x, y, noise);
+                Assert.That(threshold, Is.GreaterThan(0f).And.LessThan(1f));
+                Assert.That(RetroPSXColorMath.DitherThreshold(mode, x + period, y + period * 3, noise), Is.EqualTo(threshold));
+            }
+        }
+
         internal static RetroPaletteProfile Palette(params string[] hex)
         {
             var colors = new Color[hex.Length];

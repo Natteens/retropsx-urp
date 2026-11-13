@@ -1,3 +1,4 @@
+using RetroPSX.Rendering;
 using UnityEngine;
 
 namespace RetroPSX
@@ -37,6 +38,9 @@ namespace RetroPSX
         public float FinalImageDitherStrength => finalImageDitherStrength;
         public Texture2D CustomPattern => customPattern;
         public Texture2D BlueNoise => blueNoise;
+        /// <summary>Blue-noise threshold texture shipped with the package (64x64, linear, point), used when <see cref="BlueNoise"/> is empty.</summary>
+        public static Texture2D DefaultBlueNoise => RetroPSXShaderResources.Instance != null ? RetroPSXShaderResources.Instance.DefaultBlueNoise : null;
+        public Texture2D EffectiveBlueNoise => blueNoise != null ? blueNoise : DefaultBlueNoise;
         public RetroPosterizeMode PosterizeMode => posterizeMode;
         public int PosterizeLevels => Mathf.Clamp(posterizeLevels, MinPosterizeLevels, MaxPosterizeLevels);
         public float PosterizeStrength => Mathf.Clamp01(posterizeStrength);
@@ -54,7 +58,17 @@ namespace RetroPSX
         /// <summary>Palette Mapping runs only with a valid palette; an empty or invalid palette is skipped.</summary>
         public bool PaletteActive => paletteEnabled && PaletteStrength > 0f && palette != null && palette.IsValid;
         /// <summary>Posterize dithering is suppressed while Palette Mapping runs: the last artistic stage owns dithering.</summary>
-        public bool PosterizeDitherActive => PosterizeActive && posterizeDither != RetroDitherMode.Off && PosterizeDitherStrength > 0f && !PaletteActive;
+        public bool PosterizeDitherActive => PosterizeActive && EffectiveDither(posterizeDither) != RetroDitherMode.Off && PosterizeDitherStrength > 0f && !PaletteActive;
+
+        /// <summary>The pattern a stage really uses: Custom without a Custom Pattern texture applies no dither.</summary>
+        public RetroDitherMode EffectiveDither(RetroDitherMode requested)
+        {
+            if (requested == RetroDitherMode.Custom && customPattern == null)
+                return RetroDitherMode.Off;
+            if (requested == RetroDitherMode.BlueNoise && EffectiveBlueNoise == null)
+                return RetroDitherMode.Off;
+            return requested;
+        }
 
         private void OnValidate()
         {

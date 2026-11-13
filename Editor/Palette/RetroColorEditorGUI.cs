@@ -65,19 +65,19 @@ namespace RetroPSX.Editor
             EditorGUI.DrawRect(line, LineColor);
         }
 
+        // Word-wrapped mini label. Its height comes from GUILayout's word-wrap sizing at the final width, so
+        // indentation and the optional icon (reserved as left padding) are accounted for exactly.
         internal static void InfoLine(string text, string icon = null)
         {
             var style = new GUIStyle(EditorStyles.miniLabel) { wordWrap = true, richText = false };
-            var content = new GUIContent(text);
-            float indent = icon != null ? 18f : 0f;
-            Rect rect = EditorGUILayout.GetControlRect(false, style.CalcHeight(content, EditorGUIUtility.currentViewWidth - 40f - indent));
-            rect = EditorGUI.IndentedRect(rect);
+            style.margin.left += (int)(EditorGUI.indentLevel * 15f);
             if (icon != null)
-            {
-                DrawIcon(new Rect(rect.x, rect.y + 1f, 14f, 14f), icon);
-                rect.xMin += indent;
-            }
-            EditorGUI.LabelField(rect, content, style);
+                style.padding.left += 18;
+            var content = new GUIContent(text);
+            Rect rect = GUILayoutUtility.GetRect(content, style);
+            if (icon != null)
+                DrawIcon(new Rect(rect.x + 1f, rect.y + 1f, 14f, 14f), icon);
+            GUI.Label(rect, content, style);
         }
 
         internal static void Swatches(Rect rect, IReadOnlyList<Color> colors, int maxRows = 2)
