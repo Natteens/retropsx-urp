@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/Natteens/retropsx-urp/compare/v1.2.0...v1.2.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* refine artistic color dithering and inspector layout ([47d9cef](https://github.com/Natteens/retropsx-urp/commit/47d9cefd02d37c543a3ca7943036995a596b434d))
+
 # [1.2.0](https://github.com/Natteens/retropsx-urp/compare/v1.1.7...v1.2.0) (2026-11-12)
 
 
