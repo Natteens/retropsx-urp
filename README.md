@@ -69,7 +69,7 @@ Final-image precision, posterization, and palette mapping run in that order afte
 
 ## Materials
 
-`RetroPSX/Lit` and `RetroPSX/Unlit` are optional, ready-made shaders for the complete material-side feature set. Use them when you want affine textures, vertex precision, vertex lighting, vertex color modulation, material dithering, or material fog with minimal setup.
+`RetroPSX/Lit` is URP Lit with optional PS1 vertex jitter and color grading (exposure, saturation, HDR tint, posterize): everything URP Lit does, lighting included, plus the wobble. `RetroPSX/Unlit` is the ready-made unlit shader for affine textures, vertex precision, vertex color modulation, material dithering, or material fog with minimal setup.
 
 Custom shaders can include the public material library and opt into individual helpers:
 

@@ -13,9 +13,9 @@
     "email": "natteens.social@gmail.com",
     "url": "https://github.com/Natteens"
   },
-  "unity": "6000.0",
+  "unity": "6000.6",
   "dependencies": {
-    "com.unity.render-pipelines.universal": "17.0.3"
+    "com.unity.render-pipelines.universal": "17.6.0"
   },
   "documentationUrl": "https://github.com/Natteens/retropsx-urp",
   "changelogUrl": "https://github.com/Natteens/retropsx-urp/blob/main/CHANGELOG.md",

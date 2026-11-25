@@ -166,9 +166,22 @@ Per-material strengths are ordinary shader properties, so they can be set by a m
 
 ## Materials and transparency
 
-`RetroPSX/Lit` and `RetroPSX/Unlit` share one material pass include. Both support point-sampled base textures, vertex colors, modulation, geometry precision, affine UVs, dither/quantization, cutout, fog participation, and transparency controls.
+`RetroPSX/Lit` is URP's own Lit shader (same passes, lighting, shadows, normal/metallic/emission maps, surface options and SRP Batcher support) with an optional **RetroPSX** foldout:
 
-The material inspector maps Average, Additive, Subtractive, and Add Quarter to Unity fixed-function blending. Average uses half alpha, Add Quarter uses quarter-alpha additive blending, and Subtractive uses reverse subtraction. Modern Alpha is also available. The package does not emulate the framebuffer mask bit or per-texel semi-transparency flag.
+| Property | Default | Effect |
+| --- | --- | --- |
+| Jitter Strength | 1 | Snaps vertices to a low-resolution pixel grid (the PS1 wobble). 0 turns it off. |
+| Jitter Grid (rows) | 240 | Vertical size of that grid. Lower values wobble more. |
+| Exposure (stops) | 0 | Darker or brighter, in stops. |
+| Saturation | 1 | 0 is grayscale, 2 is oversaturated. |
+| Tint | white | HDR multiply color. |
+| Posterize Steps | 0 | Color steps per channel (32 is roughly PS1 15-bit). 0 turns it off. |
+
+The jitter is per material and does not need the renderer feature. Color grading applies in Forward; in Deferred only the jitter applies. `RetroPSX/Lit` targets URP 17.6 (Unity 6.6).
+
+`RetroPSX/Unlit` keeps the original material pass include: point-sampled base textures, vertex colors, modulation, geometry precision, affine UVs, dither/quantization, cutout, fog participation, and transparency controls.
+
+The Unlit material inspector maps Average, Additive, Subtractive, and Add Quarter to Unity fixed-function blending. Average uses half alpha, Add Quarter uses quarter-alpha additive blending, and Subtractive uses reverse subtraction. Modern Alpha is also available. The package does not emulate the framebuffer mask bit or per-texel semi-transparency flag.
 
 Arbitrary transparent shaders retain their own queues, blending, clipping, depth writes, and stencil behavior. They are not overridden or double-rendered. Volumetric reconstruction uses opaque camera depth, so exact atmosphere ordering through arbitrary transparent layers is not available without shader participation or a separate transparent-depth system.
 
