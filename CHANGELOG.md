@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/Natteens/retropsx-urp/compare/v2.0.0...v2.0.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* **post:** run the retro post after URP post-processing ([329e93c](https://github.com/Natteens/retropsx-urp/commit/329e93c3bcd6cb1a6a8d8524fea6bc416fe64fec))
+
 # [2.0.0](https://github.com/Natteens/retropsx-urp/compare/v1.2.1...v2.0.0) (2026-11-25)
 
 
