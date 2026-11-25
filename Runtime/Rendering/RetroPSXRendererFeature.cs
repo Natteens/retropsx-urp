@@ -42,11 +42,12 @@ namespace RetroPSX.Rendering
             };
             postPass = new RetroPSXPostPass(resolveMaterial, presentationMaterial, volumetricMaterial, volumetricCompositeMaterial, crtMaterial)
             {
-                renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing
+                // After URP post-processing: bloom and tonemapping need the HDR color the retro resolve clamps to 0..1.
+                renderPassEvent = RenderPassEvent.AfterRenderingPostProcessing
             };
             nativeUIPass = new RetroPSXNativeUIPass
             {
-                renderPassEvent = (RenderPassEvent)((int)RenderPassEvent.BeforeRenderingPostProcessing + 1)
+                renderPassEvent = (RenderPassEvent)((int)RenderPassEvent.AfterRenderingPostProcessing + 1)
             };
         }
 
