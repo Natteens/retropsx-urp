@@ -1,3 +1,16 @@
+# [2.0.0](https://github.com/Natteens/retropsx-urp/compare/v1.2.1...v2.0.0) (2026-11-25)
+
+
+* feat(lit)!: rebuild RetroPSX/Lit on top of URP Lit ([49915b2](https://github.com/Natteens/retropsx-urp/commit/49915b21f13ba75a3fd60e098bf4f9b01bc68b91))
+
+
+### BREAKING CHANGES
+
+* the old Lit-only properties (shading mode, texture
+modulation, overbright, lighting mode, affine, material dither, fog
+participation, transparency mode) are gone; Lit materials now use URP's
+surface options. Requires Unity 6000.6 / URP 17.6.
+
 ## [1.2.1](https://github.com/Natteens/retropsx-urp/compare/v1.2.0...v1.2.1) (2026-11-13)
 
 
